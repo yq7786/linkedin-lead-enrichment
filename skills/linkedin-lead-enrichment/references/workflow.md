@@ -13,7 +13,7 @@ submit-qualified
 final status summary
 ```
 
-Use `npm run guided-workflow` for live operator runs. It writes `.env`, applies the selected account to `linkedin_connection_inventory.account`, keeps one browser open across all browser-backed steps, and prints the final status summary for the just-discovered profile URLs.
+Use `npm run guided-workflow` for live operator runs. Pass `--account` and `--limit` after writing `.env` to skip duplicate prompts when the agent already collected inputs in chat.
 
 Use `npm run guided-workflow -- --skip-finalization` only for skill optimization, local testing, or dry rehearsals that must stop before portal submission. This mode still runs the browser-backed workflow sequentially with one persistent browser context, then stops after `sync-company-websites` and skips `submit-qualified` plus the final status summary.
 

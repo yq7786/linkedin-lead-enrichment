@@ -1,18 +1,18 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import readline from "node:readline/promises";
 
 import { PortalCandidateAdapter } from "./adapters/portalCandidates.js";
 import { captureCompanyWebsiteWithPlaywright } from "./company/websiteCapture.js";
-import { validateConfig } from "./config.js";
+import { loadDotenv, validateConfig } from "./config.js";
 import { createDbClient } from "./db/client.js";
-import { createLinkedInBrowserSession, detectLinkedInBlockers } from "./linkedin/browser.js";
 import {
   ActivityItemsRepository,
   extractActivityItemsFromPage,
   syncLinkedInActivityItems
 } from "./linkedin/activitySync.js";
+import { createLinkedInBrowserSession, detectLinkedInBlockers } from "./linkedin/browser.js";
 import {
   CompanyProfileRepository,
   extractCompanyProfileFromPage,
@@ -23,27 +23,50 @@ import {
   extractConnectionCardsFromPage,
   syncLinkedInConnections
 } from "./linkedin/connectionSync.js";
+import { CandidateFileRepository } from "./workflow/candidateFiles.js";
+import { dedupeInventory, DedupeInventoryRepository } from "./workflow/dedupeInventory.js";
 import {
   createPlaywrightProfileExtractor,
   processQueuedProfiles,
   ProcessQueueRepository
 } from "./workflow/processQueue.js";
-import { CandidateFileRepository } from "./workflow/candidateFiles.js";
-import { dedupeInventory, DedupeInventoryRepository } from "./workflow/dedupeInventory.js";
 import {
   scoreExtractedProfiles,
   ScoreExtractedProfilesRepository
 } from "./workflow/scoreExtractedProfiles.js";
-import { CompanyWebsiteRepository, syncCompanyWebsites } from "./workflow/syncCompanyWebsites.js";
 import {
   submitQualifiedCandidates,
   SubmitQualifiedCandidatesRepository
 } from "./workflow/submitQualifiedCandidates.js";
+import { CompanyWebsiteRepository, syncCompanyWebsites } from "./workflow/syncCompanyWebsites.js";
 
-export const LINKEDIN_ACCOUNT_CHOICES = ["kirk", "kathryb", "terri", "sarah", "ice", "siriluk"];
+export const LINKEDIN_ACCOUNT_CHOICES = ["kirk", "kathryn", "terri", "sarah", "ice", "siriluk"];
+
+export function resolveGuidedWorkflowAnswers({ env = process.env, account, limit } = {}) {
+  loadDotenv(env);
+  let config;
+  try {
+    config = validateConfig(env, { dryRun: false });
+  } catch {
+    return null;
+  }
+
+  const linkedinAccount = normalizeLinkedInAccount(account ?? env.LINKEDIN_ACCOUNT ?? "");
+  const parsedLimit = limit ?? parseOptionalPositiveInteger(env.CONNECTION_LIMIT) ?? config.defaultBatchLimit;
+  if (!linkedinAccount || !parsedLimit) return null;
+
+  return {
+    databaseUrl: env.DATABASE_URL,
+    openaiApiKey: env.OPENAI_API_KEY,
+    portalQualifiedIngestUrl: config.portalQualifiedIngestUrl,
+    portalCallbackSecret: env.PORTAL_CALLBACK_SECRET,
+    linkedinAccount,
+    connectionLimit: parsedLimit
+  };
+}
 
 export async function runGuidedWorkflowFromCli(options = {}) {
-  const answers = await askGuidedWorkflowQuestions(options);
+  const answers = resolveGuidedWorkflowAnswers(options) ?? await askGuidedWorkflowQuestions(options);
   return runGuidedWorkflow({ ...options, answers });
 }
 
@@ -301,13 +324,27 @@ async function askRequiredEnvValue(rl, envValues, key) {
   return askRequired(rl, `${key}: `);
 }
 
+function normalizeLinkedInAccount(answer) {
+  const text = String(answer ?? "").trim();
+  if (!text) return null;
+  const known = LINKEDIN_ACCOUNT_CHOICES.find((choice) => choice.toLowerCase() === text.toLowerCase());
+  return known ?? text;
+}
+
 async function askLinkedInAccount(rl) {
   const answer = (await rl.question(
     `LinkedIn Account (${LINKEDIN_ACCOUNT_CHOICES.join(", ")}, or type a custom account name): `
   )).trim();
-  if (!answer) return askLinkedInAccount(rl);
-  const known = LINKEDIN_ACCOUNT_CHOICES.find((choice) => choice.toLowerCase() === answer.toLowerCase());
-  return known ?? answer;
+  const normalized = normalizeLinkedInAccount(answer);
+  if (!normalized) return askLinkedInAccount(rl);
+  return normalized;
+}
+
+function parseOptionalPositiveInteger(value) {
+  if (value == null || value === "") return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return undefined;
+  return parsed;
 }
 
 async function askConnectionLimit(rl, outputStream = output) {

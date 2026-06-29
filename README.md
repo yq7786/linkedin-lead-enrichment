@@ -41,11 +41,25 @@ psql "$DATABASE_URL" -f sql/001_workflow_tables.sql
 
 ## Install the Codex Skill
 
-Copy the skill folder into your Codex skills directory:
+**Option A — repo-local (zero copy, works when Codex scans from repo root):**
 
 ```bash
-mkdir -p ~/.codex/skills
-cp -R skills/linkedin-lead-enrichment ~/.codex/skills/
+mkdir -p .agents/skills
+cp -R skills/linkedin-lead-enrichment .agents/skills/
+```
+
+**Option B - user-level install script:**
+
+```bash
+bash scripts/install-skill.sh
+# or: bash scripts/install-skill.sh ~/.codex/skills/linkedin-lead-enrichment
+```
+
+**Option C - manual copy:**
+
+```bash
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
+cp -R skills/linkedin-lead-enrichment "${CODEX_HOME:-$HOME/.codex}/skills/"
 ```
 
 Then start a new Codex session and ask:
@@ -54,12 +68,24 @@ Then start a new Codex session and ask:
 Use $linkedin-lead-enrichment to run the guided LinkedIn lead enrichment workflow.
 ```
 
+The skill collects env values in chat (bulk paste or one-by-one), asks for LinkedIn account and connection limit, writes `.env`, then runs:
+
+```bash
+npm run guided-workflow -- --account <account> --limit <N>
+```
+
 ## Run
 
-Live operator workflow:
+Live operator workflow (interactive prompts):
 
 ```bash
 npm run guided-workflow
+```
+
+After collecting inputs in chat and writing `.env` (agent or operator):
+
+```bash
+npm run guided-workflow -- --account kathryb --limit 10
 ```
 
 Optimization/testing mode, which skips `submit-qualified` and the final status summary:

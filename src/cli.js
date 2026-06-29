@@ -61,7 +61,9 @@ async function main() {
 
   if (command === "guided-workflow") {
     await runGuidedWorkflowFromCli({
-      skipFinalization: args.includes("--skip-finalization")
+      skipFinalization: args.includes("--skip-finalization"),
+      account: readStringFlag(args, "--account"),
+      limit: readNumberFlag(args, "--limit")
     });
     return;
   }
@@ -361,7 +363,7 @@ Commands:
   check-config [--dry-run]
   inspect-status
   login-linkedin
-  guided-workflow [--skip-finalization]
+  guided-workflow [--skip-finalization] [--account NAME] [--limit N]
   sync-connections [--limit N] [--dry-run]
   dedupe-inventory [--limit N] [--dry-run]
   process-queue [--limit N] [--dry-run]
@@ -407,6 +409,16 @@ function createLazyLinkedInBrowser(config) {
       await context.close();
     }
   };
+}
+
+function readStringFlag(values, flag) {
+  const index = values.indexOf(flag);
+  if (index === -1) return undefined;
+  const value = values[index + 1];
+  if (!value || value.startsWith("--")) {
+    throw new Error(`${flag} must be followed by a value`);
+  }
+  return value;
 }
 
 function readNumberFlag(values, flag) {

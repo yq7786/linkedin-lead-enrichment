@@ -7,6 +7,7 @@ import test from "node:test";
 
 import {
   askGuidedWorkflowQuestions,
+  resolveGuidedWorkflowAnswers,
   runGuidedWorkflow,
   summarizeInventoryStatuses,
   writeLocalEnvFile
@@ -62,6 +63,45 @@ test("summarizeInventoryStatuses counts only the requested profile URLs", async 
     "https://www.linkedin.com/in/jane-smith",
     "https://www.linkedin.com/in/alex-lee"
   ]]);
+});
+
+test("resolveGuidedWorkflowAnswers skips prompts when env and flags are complete", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "guided-workflow-resolve-"));
+  const envPath = path.join(directory, ".env");
+  await writeLocalEnvFile(envPath, {
+    DATABASE_URL: "postgres://example",
+    OPENAI_API_KEY: "sk-test",
+    PORTAL_QUALIFIED_INGEST_URL: "https://portal.example/ingest",
+    PORTAL_CALLBACK_SECRET: "secret"
+  });
+
+  const originalCwd = process.cwd();
+  process.chdir(directory);
+  try {
+    const answers = resolveGuidedWorkflowAnswers({
+      env: {},
+      account: "siriluk",
+      limit: 7
+    });
+    assert.deepEqual(answers, {
+      databaseUrl: "postgres://example",
+      openaiApiKey: "sk-test",
+      portalQualifiedIngestUrl: "https://portal.example/ingest",
+      portalCallbackSecret: "secret",
+      linkedinAccount: "siriluk",
+      connectionLimit: 7
+    });
+  } finally {
+    process.chdir(originalCwd);
+  }
+});
+
+test("resolveGuidedWorkflowAnswers returns null when required env is missing", () => {
+  assert.equal(resolveGuidedWorkflowAnswers({
+    env: { OPENAI_API_KEY: "sk-test" },
+    account: "kirk",
+    limit: 5
+  }), null);
 });
 
 test("askGuidedWorkflowQuestions accepts env values at once before account and limit", async () => {
