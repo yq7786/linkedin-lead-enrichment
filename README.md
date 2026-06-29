@@ -103,7 +103,7 @@ npm run guided-workflow
 After collecting inputs in chat and writing `.env` (agent or operator):
 
 ```bash
-npm run guided-workflow -- --account kathryb --limit 10
+npm run guided-workflow -- --account kathryn --limit 10
 ```
 
 Optimization/testing mode, which skips `submit-qualified` and the final status summary:
