@@ -1,0 +1,58 @@
+flowchart TB
+    subgraph setup["Setup"]
+        A["check-config<br/><i>Validate env & credentials</i>"]
+    end
+
+    subgraph ingest["Ingest & extract"]
+        B["sync-connections<br/><i>LinkedIn → inventory</i>"]
+        C["process-queue<br/><i>Profile scrape</i>"]
+        D["sync-company-profiles<br/><i>Company page scrape</i>"]
+    end
+
+    subgraph dedupe["CRM dedupe"]
+        E{"dedupe-inventory<br/><i>Match against portal CRM</i>"}
+        E1["deduped_existing<br/><b>STOP</b> — already in portal"]
+        E2["failed_needs_review<br/><b>STOP</b> — operator review"]
+        E3["not_found<br/>Continue enrichment"]
+    end
+
+    subgraph enrich["Enrich & qualify"]
+        F["sync-activities<br/><i>Recent posts & signals</i>"]
+        G{"score-fits<br/><i>AI fit scoring</i>"}
+        G1["skipped_not_fit<br/><b>STOP</b>"]
+        H["sync-company-websites<br/><i>Company website scrape</i>"]
+    end
+
+    subgraph submit["Submit"]
+        I["submit-qualified<br/><i>Portal webhook</i>"]
+        J["submitted ✓"]
+    end
+
+    INV[("linkedin_connection_inventory")]
+    CAND[".lead-enrichment-candidates/*.md"]
+
+    A --> B
+    B -->|"discovered, dedupe_pending"| INV
+    B --> C
+    C -->|"linkedin_extracted"| CAND
+    C --> D
+    D -->|"company_captured"| CAND
+    D --> E
+    E -->|"CRM match"| E1
+    E -->|"Ambiguous"| E2
+    E -->|"No match"| E3
+    E3 --> F
+    F -->|"activity_captured"| CAND
+    F --> G
+    G -->|"Not a fit"| G1
+    G -->|"qualified"| H
+    H -->|"website_captured"| CAND
+    H --> I
+    I --> J
+
+    classDef stop fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+    classDef store fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+    classDef success fill:#dcfce7,stroke:#16a34a,color:#14532d
+    class E1,E2,G1 stop
+    class INV,CAND store
+    class J success

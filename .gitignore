@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+.linkedin-browser-profile/
+.lead-enrichment-candidates/
+.lead-enrichment-snapshots/
+.DS_Store
+docs/.DS_Store
+node_modules/
+npm-debug.log*

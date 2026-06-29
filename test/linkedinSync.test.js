@@ -1,0 +1,138 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  ConnectionInventoryRepository,
+  normalizeConnectionCards,
+  syncLinkedInConnections
+} from "../src/linkedin/connectionSync.js";
+
+test("normalizeConnectionCards dedupes and maps raw LinkedIn card data to inventory records", () => {
+  const records = normalizeConnectionCards([
+    {
+      profileHref: "https://www.linkedin.com/in/jane-smith/?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAA123",
+      text: "Jane Smith\nFounder at Acme AI\nSydney, New South Wales",
+      companyHref: "https://www.linkedin.com/company/acme-ai/"
+    },
+    {
+      profileHref: "https://www.linkedin.com/in/jane-smith/?trackingId=duplicate",
+      text: "Jane Smith\nFounder at Acme AI"
+    }
+  ]);
+
+  assert.deepEqual(records, [
+    {
+      linkedinProfileUrl: "https://www.linkedin.com/in/jane-smith",
+      fullName: "Jane Smith",
+      headline: "Founder at Acme AI",
+      currentCompanyName: "Acme AI",
+      currentCompanyUrl: "https://www.linkedin.com/company/acme-ai",
+      account: null,
+      dedupeStatus: "dedupe_pending",
+      workflowStatus: "discovered"
+    }
+  ]);
+});
+
+test("syncLinkedInConnections dry-run returns extracted records without writing inventory", async () => {
+  let wrote = false;
+  const result = await syncLinkedInConnections({
+    extractConnections: async () =>
+      normalizeConnectionCards([
+        {
+          profileHref: "https://www.linkedin.com/in/jane-smith/",
+          text: "Jane Smith\nFounder at Acme AI"
+        }
+      ]),
+    inventoryRepository: {
+      upsertMany: async () => {
+        wrote = true;
+      }
+    },
+    dryRun: true
+  });
+
+  assert.equal(wrote, false);
+  assert.equal(result.status, "dry_run");
+  assert.equal(result.connections.length, 1);
+});
+
+test("syncLinkedInConnections writes normalized records in live mode", async () => {
+  const writes = [];
+  const result = await syncLinkedInConnections({
+    extractConnections: async () =>
+      normalizeConnectionCards([
+        {
+          profileHref: "https://www.linkedin.com/in/jane-smith/",
+          text: "Jane Smith\nFounder at Acme AI"
+        }
+      ]),
+    inventoryRepository: {
+      upsertMany: async (records) => {
+        writes.push(records);
+        return { upserted: records.length };
+      }
+    },
+    dryRun: false
+  });
+
+  assert.equal(result.status, "synced");
+  assert.equal(result.upserted, 1);
+  assert.equal(writes[0][0].linkedinProfileUrl, "https://www.linkedin.com/in/jane-smith");
+});
+
+test("syncLinkedInConnections stamps the selected LinkedIn account on records", async () => {
+  const writes = [];
+  const result = await syncLinkedInConnections({
+    extractConnections: async () =>
+      normalizeConnectionCards([
+        {
+          profileHref: "https://www.linkedin.com/in/jane-smith/",
+          text: "Jane Smith\nFounder at Acme AI"
+        }
+      ]),
+    inventoryRepository: {
+      upsertMany: async (records) => {
+        writes.push(records);
+        return { upserted: records.length };
+      }
+    },
+    account: "Kirk"
+  });
+
+  assert.equal(result.connections[0].account, "Kirk");
+  assert.equal(writes[0][0].account, "Kirk");
+});
+
+test("ConnectionInventoryRepository upserts by normalized profile URL", async () => {
+  const queries = [];
+  const repository = new ConnectionInventoryRepository({
+    async query(sql, params) {
+      queries.push({ sql, params });
+      return { rowCount: 1 };
+    }
+  });
+
+  const result = await repository.upsertMany([
+    {
+      linkedinProfileUrl: "https://www.linkedin.com/in/jane-smith",
+      fullName: "Jane Smith",
+      headline: "Founder at Acme AI",
+      currentCompanyName: "Acme AI",
+      currentCompanyUrl: "https://www.linkedin.com/company/acme-ai",
+      account: "Kirk",
+      dedupeStatus: "dedupe_pending",
+      workflowStatus: "discovered"
+    }
+  ]);
+
+  assert.equal(result.upserted, 1);
+  assert.match(queries[0].sql, /on conflict \(lower\(linkedin_profile_url\)\)/i);
+  assert.match(queries[0].sql, /account/i);
+  assert.deepEqual(queries[0].params.slice(0, 3), [
+    "https://www.linkedin.com/in/jane-smith",
+    "Jane Smith",
+    "Founder at Acme AI"
+  ]);
+  assert.equal(queries[0].params[5], "Kirk");
+});

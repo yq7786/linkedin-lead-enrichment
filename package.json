@@ -1,0 +1,32 @@
+{
+  "name": "linkedin-lead-enrichment",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first LinkedIn lead enrichment workflow scaffold.",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check-config": "node src/cli.js check-config",
+    "inspect-status": "node src/cli.js inspect-status",
+    "login-linkedin": "node src/cli.js login-linkedin",
+    "guided-workflow": "node src/cli.js guided-workflow",
+    "sync-connections": "node src/cli.js sync-connections",
+    "dedupe-inventory": "node src/cli.js dedupe-inventory",
+    "process-queue": "node src/cli.js process-queue",
+    "refresh-profiles": "node src/cli.js refresh-profiles",
+    "sync-activities": "node src/cli.js sync-activities",
+    "sync-company-profiles": "node src/cli.js sync-company-profiles",
+    "sync-company-websites": "node src/cli.js sync-company-websites",
+    "score-fits": "node src/cli.js score-fits",
+    "submit-qualified": "node src/cli.js submit-qualified",
+    "retry-failed": "node src/cli.js retry-failed"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "pg": "^8.22.0",
+    "playwright": "^1.61.1",
+    "turndown": "^7.2.4"
+  }
+}

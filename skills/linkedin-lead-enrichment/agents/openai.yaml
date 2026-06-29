@@ -1,0 +1,4 @@
+interface:
+  display_name: "LinkedIn Lead Enrichment"
+  short_description: "Run the LinkedIn enrichment workflow"
+  default_prompt: "Use $linkedin-lead-enrichment to run the guided LinkedIn lead enrichment workflow, collect env values in bulk or one by one, process a selected account batch, and use --skip-finalization for optimization/testing."
