@@ -1,7 +1,7 @@
 interface:
   display_name: "LinkedIn Lead Enrichment"
   short_description: "Guided LinkedIn enrichment workflow"
-  default_prompt: "Use $linkedin-lead-enrichment to run the guided workflow. Collect env values in bulk or one by one, ask for LinkedIn account and connection limit (warn about usage limits), write .env, then run npm run guided-workflow -- --account <account> --limit <N>. Use --skip-finalization for testing."
+  default_prompt: "Use $linkedin-lead-enrichment to run the guided workflow from a cloned linkedin-lead-enrichment repo. If needed, help clone the repo first; then collect env values, account, and limit, write .env, and run npm run guided-workflow -- --account <account> --limit <N>."
 
 policy:
   allow_implicit_invocation: false

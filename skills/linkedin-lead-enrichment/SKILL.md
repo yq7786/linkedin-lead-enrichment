@@ -18,6 +18,13 @@ description: Operates the local LinkedIn lead enrichment workflow — sync conne
 
 ## Quick start
 
+This skill operates the `linkedin-lead-enrichment` project. Before running workflow commands, ensure the user is inside a cloned repo with `package.json`, `src/`, `sql/`, and `.env.example`. If the skill was installed by itself, ask the user to clone and enter the project first:
+
+```bash
+git clone https://github.com/yq7786/linkedin-lead-enrichment.git
+cd linkedin-lead-enrichment
+```
+
 ```bash
 npm install
 npx playwright install chromium

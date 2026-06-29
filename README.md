@@ -4,6 +4,28 @@ Local-first LinkedIn lead enrichment workflow plus a Codex skill for operating i
 
 The project captures LinkedIn connection/profile/company/activity evidence, dedupes against portal CRM tables, scores fit, captures qualified company websites, and can submit qualified candidates to a portal webhook.
 
+## Install the Codex Skill
+
+Fastest path from another Codex session:
+
+```text
+Use $skill-installer to install https://github.com/yq7786/linkedin-lead-enrichment/tree/main/skills/linkedin-lead-enrichment
+```
+
+Restart Codex after installation, then ask:
+
+```text
+Use $linkedin-lead-enrichment to run the guided LinkedIn lead enrichment workflow.
+```
+
+This installs only the skill instructions. To run the enrichment workflow, also clone and set up the full project below.
+
+If you already cloned this repo, install the local skill with:
+
+```bash
+bash scripts/install-skill.sh
+```
+
 ## What's Included
 
 - `src/` - workflow CLI and enrichment implementation
@@ -14,10 +36,10 @@ The project captures LinkedIn connection/profile/company/activity evidence, dedu
 
 Generated data and local runtime state are intentionally ignored: `.env`, `.linkedin-browser-profile/`, `.lead-enrichment-candidates/`, `.lead-enrichment-snapshots/`, and `node_modules/`.
 
-## Install
+## Install the Full Workflow App
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/yq7786/linkedin-lead-enrichment.git
 cd linkedin-lead-enrichment
 npm install
 npx playwright install chromium
@@ -39,33 +61,29 @@ Create the workflow tables in your database:
 psql "$DATABASE_URL" -f sql/001_workflow_tables.sql
 ```
 
-## Install the Codex Skill
+## Local Skill Install Options
 
-**Option A — repo-local (zero copy, works when Codex scans from repo root):**
+Use these only when you have already cloned the repository.
+
+**Option A - repo-local copy**
 
 ```bash
 mkdir -p .agents/skills
 cp -R skills/linkedin-lead-enrichment .agents/skills/
 ```
 
-**Option B - user-level install script:**
+**Option B - user-level install script**
 
 ```bash
 bash scripts/install-skill.sh
 # or: bash scripts/install-skill.sh ~/.codex/skills/linkedin-lead-enrichment
 ```
 
-**Option C - manual copy:**
+**Option C - manual user-level copy**
 
 ```bash
 mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
 cp -R skills/linkedin-lead-enrichment "${CODEX_HOME:-$HOME/.codex}/skills/"
-```
-
-Then start a new Codex session and ask:
-
-```text
-Use $linkedin-lead-enrichment to run the guided LinkedIn lead enrichment workflow.
 ```
 
 The skill collects env values in chat (bulk paste or one-by-one), asks for LinkedIn account and connection limit, writes `.env`, then runs:
