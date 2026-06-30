@@ -32,7 +32,7 @@ export async function waitForLinkedInLogin(
 
   while (true) {
     const pageText = (await page.textContent("body").catch(() => "")) ?? "";
-    const blocker = detectLinkedInBlockers(pageText);
+    const blocker = detectLinkedInBlockers(pageText, { url: page.url?.() });
     if (blocker.blocked && blocker.kind !== "linkedin_login_expired") {
       await waitForLinkedInBlockersToClear(page, { pollIntervalMs, log });
       continue;

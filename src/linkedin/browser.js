@@ -14,7 +14,7 @@ export async function waitForLinkedInBlockersToClear(
 
   while (true) {
     const pageText = (await page.textContent?.("body").catch(() => "")) ?? "";
-    const blocker = detectLinkedInBlockers(pageText);
+    const blocker = detectLinkedInBlockers(pageText, { url: page.url?.() });
     if (!blocker.blocked) {
       return { status: "session_ready" };
     }
@@ -33,12 +33,26 @@ export async function waitForLinkedInBlockersToClear(
   }
 }
 
-export function detectLinkedInBlockers(pageText) {
+export function detectLinkedInBlockers(pageText, { url } = {}) {
   const text = pageText.toLowerCase();
-  if (text.includes("security verification") || text.includes("checkpoint") || text.includes("captcha")) {
+  const currentUrl = String(url ?? "").toLowerCase();
+  if (
+    currentUrl.includes("/checkpoint/") ||
+    currentUrl.includes("/challenge/") ||
+    text.includes("security verification") ||
+    text.includes("checkpoint") ||
+    text.includes("captcha")
+  ) {
     return { blocked: true, kind: "linkedin_checkpoint" };
   }
-  if (text.includes("sign in") && text.includes("linkedin")) {
+  if (
+    currentUrl.includes("/login") ||
+    currentUrl.includes("/uas/login") ||
+    currentUrl.includes("/authwall") ||
+    text.includes("sign in to linkedin") ||
+    (text.includes("email or phone") && text.includes("forgot password")) ||
+    text.includes("sign in to view")
+  ) {
     return { blocked: true, kind: "linkedin_login_expired" };
   }
   return { blocked: false };

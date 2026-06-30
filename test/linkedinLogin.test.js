@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { waitForLinkedInBlockersToClear } from "../src/linkedin/browser.js";
+import { detectLinkedInBlockers, waitForLinkedInBlockersToClear } from "../src/linkedin/browser.js";
 import { openLinkedInLoginSession, waitForLinkedInLogin } from "../src/linkedin/login.js";
 
 test("openLinkedInLoginSession waits for LinkedIn login with the persistent profile before closing", async () => {
@@ -127,6 +127,7 @@ test("waitForLinkedInBlockersToClear keeps polling the same page until checkpoin
 
 test("waitForLinkedInLogin keeps polling while login is expired", async () => {
   const calls = [];
+  let currentIndex = 0;
   const responses = [
     "LinkedIn Sign in",
     "LinkedIn Sign in",
@@ -138,7 +139,14 @@ test("waitForLinkedInLogin keeps polling while login is expired", async () => {
     },
     async textContent(selector) {
       calls.push(["textContent", selector]);
-      return responses.shift();
+      const response = responses[currentIndex];
+      currentIndex += 1;
+      return response;
+    },
+    url() {
+      return currentIndex < 3
+        ? "https://www.linkedin.com/login"
+        : "https://www.linkedin.com/feed/";
     }
   };
 
@@ -155,4 +163,27 @@ test("waitForLinkedInLogin keeps polling while login is expired", async () => {
     ["textContent", "body"],
     ["textContent", "body"]
   ]);
+});
+
+test("detectLinkedInBlockers does not treat profile chrome sign-in text as expired auth", () => {
+  const blocker = detectLinkedInBlockers(
+    [
+      "Jane Smith",
+      "Founder at Acme AI",
+      "LinkedIn",
+      "Sign in to follow company updates"
+    ].join("\n"),
+    { url: "https://www.linkedin.com/in/jane-smith/" }
+  );
+
+  assert.deepEqual(blocker, { blocked: false });
+});
+
+test("detectLinkedInBlockers treats LinkedIn authwall URL as expired auth", () => {
+  const blocker = detectLinkedInBlockers(
+    "LinkedIn",
+    { url: "https://www.linkedin.com/authwall?trk=gf&original_referer=" }
+  );
+
+  assert.deepEqual(blocker, { blocked: true, kind: "linkedin_login_expired" });
 });
