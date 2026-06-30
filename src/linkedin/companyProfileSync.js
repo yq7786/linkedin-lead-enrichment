@@ -1,4 +1,5 @@
 import { normalizeLinkedInProfileUrl } from "../dedupe.js";
+import { waitForLinkedInBlockersToClear } from "./browser.js";
 
 export async function extractCompanyProfileFromPage(page, options = {}) {
   const companyUrl = normalizeCompanyUrl(options.companyUrl);
@@ -7,6 +8,7 @@ export async function extractCompanyProfileFromPage(page, options = {}) {
   const aboutUrl = `${companyUrl.replace(/\/$/, "")}/about/`;
   await page.goto(aboutUrl, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState?.("networkidle", { timeout: options.networkIdleTimeoutMs ?? 10000 }).catch(() => {});
+  await waitForLinkedInBlockersToClear(page, { log: options.log });
 
   const capture = await page.evaluate(() => {
     const main = document.querySelector("main");

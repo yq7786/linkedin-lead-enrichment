@@ -12,7 +12,7 @@ import {
   extractActivityItemsFromPage,
   syncLinkedInActivityItems
 } from "./linkedin/activitySync.js";
-import { createLinkedInBrowserSession, detectLinkedInBlockers } from "./linkedin/browser.js";
+import { createLinkedInBrowserSession, waitForLinkedInBlockersToClear } from "./linkedin/browser.js";
 import {
   CompanyProfileRepository,
   extractCompanyProfileFromPage,
@@ -159,13 +159,7 @@ export async function runGuidedWorkflow({
     log("Step 1/8: sync-connections");
     const syncResult = await syncConnections({
       extractConnections: async () => {
-        const connections = await extractConnectionCardsFromPage(page, { limit: answers.connectionLimit });
-        const pageText = (await page.textContent("body")) ?? "";
-        const blocker = detectLinkedInBlockers(pageText);
-        if (blocker.blocked) {
-          throw new Error(`LinkedIn browser blocked: ${blocker.kind}`);
-        }
-        return connections;
+        return extractConnectionCardsFromPage(page, { limit: answers.connectionLimit, log });
       },
       inventoryRepository: new ConnectionInventoryRepository(client),
       account: answers.linkedinAccount
@@ -180,7 +174,7 @@ export async function runGuidedWorkflow({
     logStepSummary(await processProfiles({
       queueRepository: new ProcessQueueRepository(client),
       candidateRepository,
-      extractProfile: async (item) => createPlaywrightProfileExtractor(page)(item),
+      extractProfile: async (item) => createPlaywrightProfileExtractor(page, { log })(item),
       limit: answers.connectionLimit,
       profileUrls
     }), log);
@@ -189,7 +183,7 @@ export async function runGuidedWorkflow({
     logStepSummary(await syncCompanies({
       repository: new CompanyProfileRepository(client),
       candidateRepository,
-      extractCompany: async (item) => extractCompanyProfileFromPage(page, { companyUrl: item.currentCompanyUrl }),
+      extractCompany: async (item) => extractCompanyProfileFromPage(page, { companyUrl: item.currentCompanyUrl, log }),
       limit: answers.connectionLimit,
       profileUrls
     }), log);
@@ -210,7 +204,8 @@ export async function runGuidedWorkflow({
       extractActivities: async (item) =>
         extractActivityItemsFromPage(page, {
           profileUrl: item.linkedinProfileUrl,
-          limit: 10
+          limit: 10,
+          log
         }),
       limit: answers.connectionLimit,
       profileUrls
@@ -276,7 +271,8 @@ async function ensureLinkedInSession(page, { waitForLogin, log }) {
   const result = await waitForLogin(page, { log });
   if (result.status === "session_ready") return;
   if (result.status === "blocked") {
-    throw new Error(`LinkedIn browser blocked: ${result.blocker}`);
+    await waitForLinkedInBlockersToClear(page, { log });
+    return;
   }
   throw new Error("LinkedIn login was not completed before the timeout. Rerun the workflow when ready.");
 }

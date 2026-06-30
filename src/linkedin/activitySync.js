@@ -1,4 +1,5 @@
 import { normalizeLinkedInProfileUrl } from "../dedupe.js";
+import { waitForLinkedInBlockersToClear } from "./browser.js";
 
 const DEFAULT_ACTIVITY_LIMIT = 10;
 
@@ -9,8 +10,10 @@ export async function extractActivityItemsFromPage(page, options = {}) {
   const activityUrl = `${profileUrl.replace(/\/$/, "")}/recent-activity/all/`;
   await page.goto(activityUrl, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState?.("networkidle", { timeout: options.networkIdleTimeoutMs ?? 10000 }).catch(() => {});
+  await waitForLinkedInBlockersToClear(page, { log: options.log });
   await autoScroll(page, options.scrollPasses ?? 3);
   await expandTruncatedActivityContent(page, options.expandPasses ?? 3);
+  await waitForLinkedInBlockersToClear(page, { log: options.log });
 
   const rawCards = await page.evaluate((limit) => {
     const nodes = [

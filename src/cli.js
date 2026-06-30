@@ -4,7 +4,7 @@ import path from "node:path";
 import { validateConfig } from "./config.js";
 import { createDbClient } from "./db/client.js";
 import { runGuidedWorkflowFromCli } from "./guidedWorkflow.js";
-import { createLinkedInBrowserSession, detectLinkedInBlockers } from "./linkedin/browser.js";
+import { createLinkedInBrowserSession } from "./linkedin/browser.js";
 import {
   ConnectionInventoryRepository,
   extractConnectionCardsFromPage,
@@ -106,13 +106,7 @@ async function main() {
       const page = context.pages()[0] ?? await context.newPage();
       const result = await syncLinkedInConnections({
         extractConnections: async () => {
-          const connections = await extractConnectionCardsFromPage(page, { limit });
-          const pageText = (await page.textContent("body")) ?? "";
-          const blocker = detectLinkedInBlockers(pageText);
-          if (blocker.blocked) {
-            throw new Error(`LinkedIn browser blocked: ${blocker.kind}`);
-          }
-          return connections;
+          return extractConnectionCardsFromPage(page, { limit, log: console.error });
         },
         inventoryRepository: dryRun
           ? null
@@ -159,7 +153,7 @@ async function main() {
         }),
         extractProfile: async (item) => {
           const page = await browser.page();
-          return createPlaywrightProfileExtractor(page)(item);
+          return createPlaywrightProfileExtractor(page, { log: console.error })(item);
         },
         limit: limit ?? config.defaultBatchLimit,
         dryRun
@@ -187,7 +181,7 @@ async function main() {
         }),
         extractProfile: async (item) => {
           const page = await browser.page();
-          return createPlaywrightProfileExtractor(page)(item);
+          return createPlaywrightProfileExtractor(page, { log: console.error })(item);
         },
         limit: limit ?? config.defaultBatchLimit,
         dryRun
@@ -275,7 +269,8 @@ async function main() {
           const page = await browser.page();
           return extractActivityItemsFromPage(page, {
             profileUrl: item.linkedinProfileUrl,
-            limit: 10
+            limit: 10,
+            log: console.error
           });
         },
         limit: limit ?? config.defaultBatchLimit,
@@ -335,7 +330,7 @@ async function main() {
         candidateRepository,
         extractCompany: async (item) => {
           const page = await browser.page();
-          return extractCompanyProfileFromPage(page, { companyUrl: item.currentCompanyUrl });
+          return extractCompanyProfileFromPage(page, { companyUrl: item.currentCompanyUrl, log: console.error });
         },
         limit: limit ?? config.defaultBatchLimit,
         dryRun

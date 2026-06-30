@@ -1,4 +1,4 @@
-import { detectLinkedInBlockers } from "../linkedin/browser.js";
+import { detectLinkedInBlockers, waitForLinkedInBlockersToClear } from "../linkedin/browser.js";
 
 export async function processQueuedProfiles({
   queueRepository,
@@ -110,11 +110,12 @@ export async function refreshProfileCaptures({
   };
 }
 
-export function createPlaywrightProfileExtractor(page) {
+export function createPlaywrightProfileExtractor(page, options = {}) {
   return async function extractProfile(item) {
     const sourceUrl = item.linkedinProfileUrl ?? item.linkedin_profile_url;
     await page.goto(sourceUrl, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState?.("networkidle", { timeout: 10000 }).catch(() => {});
+    await waitForLinkedInBlockersToClear(page, { log: options.log });
 
     const profileCapture = await page.evaluate(() => {
       const main = document.querySelector("main");
@@ -152,7 +153,8 @@ export function createPlaywrightProfileExtractor(page) {
     const rawProfileText = normalizedCapture.rawText || htmlToVisibleText(normalizedCapture.rawHtml);
     const blocker = detectLinkedInBlockers(profileText);
     if (blocker.blocked) {
-      throw new Error(`LinkedIn browser blocked: ${blocker.kind}`);
+      await waitForLinkedInBlockersToClear(page, { log: options.log });
+      return extractProfile(item);
     }
 
     const headerText = headerSection?.text || profileText;

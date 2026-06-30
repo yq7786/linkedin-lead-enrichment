@@ -1,4 +1,4 @@
-import { createLinkedInBrowserSession, detectLinkedInBlockers } from "./browser.js";
+import { createLinkedInBrowserSession, detectLinkedInBlockers, waitForLinkedInBlockersToClear } from "./browser.js";
 
 const DEFAULT_LOGIN_TIMEOUT_MS = 15 * 60 * 1000;
 const DEFAULT_LOGIN_POLL_INTERVAL_MS = 2000;
@@ -27,7 +27,6 @@ export async function waitForLinkedInLogin(
   } = {}
 ) {
   const startedAt = Date.now();
-  let blockerNotice = null;
   await page.goto("https://www.linkedin.com/login", { waitUntil: "domcontentloaded" });
   log("Log in to LinkedIn in the opened browser. This command will wait until the session is ready.");
 
@@ -35,11 +34,7 @@ export async function waitForLinkedInLogin(
     const pageText = (await page.textContent("body").catch(() => "")) ?? "";
     const blocker = detectLinkedInBlockers(pageText);
     if (blocker.blocked && blocker.kind !== "linkedin_login_expired") {
-      if (blockerNotice !== blocker.kind) {
-        log(`LinkedIn shows ${blocker.kind}. Clear it manually in the open browser; this command will keep waiting.`);
-        blockerNotice = blocker.kind;
-      }
-      await delay(pollIntervalMs);
+      await waitForLinkedInBlockersToClear(page, { pollIntervalMs, log });
       continue;
     }
     if (!blocker.blocked) {

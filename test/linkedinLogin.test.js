@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { waitForLinkedInBlockersToClear } from "../src/linkedin/browser.js";
 import { openLinkedInLoginSession, waitForLinkedInLogin } from "../src/linkedin/login.js";
 
 test("openLinkedInLoginSession waits for LinkedIn login with the persistent profile before closing", async () => {
@@ -83,9 +84,45 @@ test("openLinkedInLoginSession keeps browser open while checkpoint is cleared", 
     ["textContent"],
     ["textContent"],
     ["textContent"],
+    ["textContent"],
     ["close"]
   ]);
-  assert.match(logs.join("\n"), /Clear it manually in the open browser/);
+  assert.match(logs.join("\n"), /Please clear the challenge in the open browser/);
+});
+
+test("waitForLinkedInBlockersToClear keeps polling the same page until checkpoint clears", async () => {
+  const calls = [];
+  const logs = [];
+  const responses = [
+    "Security verification checkpoint",
+    "Security verification checkpoint",
+    "LinkedIn Feed"
+  ];
+  const page = {
+    async textContent(selector) {
+      calls.push(["textContent", selector]);
+      return responses.shift();
+    },
+    async waitForTimeout(ms) {
+      calls.push(["waitForTimeout", ms]);
+    }
+  };
+
+  const result = await waitForLinkedInBlockersToClear(page, {
+    pollIntervalMs: 1,
+    log: (message) => logs.push(message)
+  });
+
+  assert.deepEqual(result, { status: "session_ready" });
+  assert.deepEqual(calls, [
+    ["textContent", "body"],
+    ["waitForTimeout", 1],
+    ["textContent", "body"],
+    ["waitForTimeout", 1],
+    ["textContent", "body"]
+  ]);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /Please clear the challenge in the open browser/);
 });
 
 test("waitForLinkedInLogin keeps polling while login is expired", async () => {

@@ -1,4 +1,5 @@
 import { normalizeLinkedInProfileUrl } from "../dedupe.js";
+import { waitForLinkedInBlockersToClear } from "./browser.js";
 import { toInventoryRecord } from "./sync.js";
 
 const CONNECTIONS_URL = "https://www.linkedin.com/mynetwork/invite-connect/connections/";
@@ -6,7 +7,9 @@ const CONNECTIONS_URL = "https://www.linkedin.com/mynetwork/invite-connect/conne
 export async function extractConnectionCardsFromPage(page, options = {}) {
   await page.goto(options.url ?? CONNECTIONS_URL, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState?.("networkidle", { timeout: options.networkIdleTimeoutMs ?? 10000 }).catch(() => {});
+  await waitForLinkedInBlockersToClear(page, { log: options.log });
   await autoScroll(page, options.scrollPasses ?? 3);
+  await waitForLinkedInBlockersToClear(page, { log: options.log });
 
   const rawCards = await page.evaluate((limit) => {
     const anchors = [...document.querySelectorAll('a[href*="/in/"]')];

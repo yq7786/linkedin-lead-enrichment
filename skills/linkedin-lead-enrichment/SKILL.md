@@ -11,7 +11,7 @@ description: Operates the local LinkedIn lead enrichment workflow — sync conne
 - Submit qualified candidates through the portal qualified-ingest webhook only.
 - Use Playwright for LinkedIn and company website capture.
 - Treat Neon as workflow control plane; do not mutate portal CRM rows locally.
-- Stop on LinkedIn login expiry, CAPTCHA, checkpoint, or security challenge.
+- When LinkedIn shows login expiry, CAPTCHA, checkpoint, or security challenge, stop automated LinkedIn actions and keep the current browser open while the user resolves it.
 - Update `linkedin_connection_inventory.workflow_status` throughout the run.
 - `recentActivitySignal` means at least one visible LinkedIn post or comment in the last 6 months.
 - Do not probe live LinkedIn or portal endpoints unless the user explicitly asks. Prefer `--dry-run` first.
