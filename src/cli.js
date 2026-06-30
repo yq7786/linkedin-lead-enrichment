@@ -104,14 +104,14 @@ async function main() {
     let client;
     try {
       const page = context.pages()[0] ?? await context.newPage();
+      client = await connectedDbClient(config.databaseUrl);
       const result = await syncLinkedInConnections({
-        extractConnections: async () => {
-          return extractConnectionCardsFromPage(page, { limit, log: console.error });
+        extractConnections: async (options = {}) => {
+          return extractConnectionCardsFromPage(page, { ...options, log: console.error });
         },
-        inventoryRepository: dryRun
-          ? null
-          : new ConnectionInventoryRepository((client = await connectedDbClient(config.databaseUrl))),
-        dryRun
+        inventoryRepository: new ConnectionInventoryRepository(client),
+        dryRun,
+        limit
       });
       console.log(JSON.stringify(result, null, 2));
     } finally {
@@ -369,6 +369,9 @@ Commands:
   sync-company-websites [--limit N] [--dry-run] [--resync]
   submit-qualified [--limit N] [--dry-run]
   retry-failed
+
+Notes:
+  sync-connections --limit N prepares up to N eligible workflow items. It selects existing discovered/dedupe_pending inventory first, then scans LinkedIn only to top up the batch.
 `);
 }
 

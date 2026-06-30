@@ -23,7 +23,7 @@ Use `npm run guided-workflow -- --skip-finalization` only for skill optimization
 
 | Step | Selects | Writes to |
 | --- | --- | --- |
-| `sync-connections` | — | `linkedin_connection_inventory` (`discovered`, `dedupe_pending`) |
+| `sync-connections` | Existing `discovered` + `dedupe_pending`, then LinkedIn top-up if needed | `linkedin_connection_inventory` (`discovered`, `dedupe_pending`) |
 | `process-queue` | `discovered` + `dedupe_pending` | Candidate file + `linkedin_extracted` |
 | `sync-company-profiles` | `linkedin_extracted` + `dedupe_pending` | Candidate file + `company_captured` |
 | `dedupe-inventory` | `company_captured` + `dedupe_pending` | Inventory CRM link or `dedupe_cleared_for_enrichment` |
@@ -31,7 +31,7 @@ Use `npm run guided-workflow -- --skip-finalization` only for skill optimization
 | `score-fits` | Candidate files (`profile_captured`, `company_captured`, `activity_captured`) | Candidate file + `qualified` / `skipped_not_fit` |
 | `sync-company-websites` | `qualified` candidates only | Candidate file + `website_captured` |
 | `submit-qualified` | `website_captured` candidates | Portal webhook + `submitted` |
-| Final status summary | Just-discovered profile URLs | Counts grouped by `linkedin_connection_inventory.workflow_status` |
+| Final status summary | Selected batch profile URLs | Counts grouped by `linkedin_connection_inventory.workflow_status` |
 
 ## Dedupe outcomes
 
@@ -43,4 +43,4 @@ Use `npm run guided-workflow -- --skip-finalization` only for skill optimization
 
 Enrichment evidence lives in `.lead-enrichment-candidates/*.md`. The fenced JSON block at the top is the source of truth.
 
-Manual command behavior processes all eligible rows per step. Pass `--limit N` to cap batch size. The guided workflow filters downstream steps to the profile URLs discovered in its current batch.
+`--limit N` means up to N eligible workflow items, not N visible LinkedIn cards. `sync-connections` first selects existing `discovered` + `dedupe_pending` rows, then scans LinkedIn only enough to top up the batch. Manual command behavior processes all eligible rows per step unless `--limit N` caps the batch size. The guided workflow filters downstream steps to the selected batch profile URLs.

@@ -14,7 +14,7 @@ Collect configuration in chat, then run the CLI without duplicate prompts.
    - `PORTAL_QUALIFIED_INGEST_URL`
    - `PORTAL_CALLBACK_SECRET`
    - LinkedIn account: `kirk`, `kathryn`, `terri`, `sarah`, `ice`, `siriluk`, or a custom account name (stored in `linkedin_connection_inventory.account`)
-   - Number of connections to process — warn that processing too many connections at once might hit LinkedIn usage limits or paid API limits
+   - Number of eligible workflow items to process — warn that processing too many connections at once might hit LinkedIn usage limits or paid API limits
 2. Write `.env` with the four env keys.
 3. Run:
 
@@ -29,6 +29,8 @@ npm run guided-workflow -- --account <account> --limit <N> --skip-finalization
 ```
 
 When `.env` is complete and `--account` / `--limit` are passed, the CLI skips interactive prompts.
+
+`--limit N` means up to N useful workflow items. Existing `discovered` + `dedupe_pending` inventory rows are selected first, and LinkedIn connection scanning only tops up the batch when there are fewer than N eligible rows already waiting.
 
 ### B. Interactive terminal
 

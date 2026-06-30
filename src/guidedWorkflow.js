@@ -158,17 +158,26 @@ export async function runGuidedWorkflow({
 
     log("Step 1/8: sync-connections");
     const syncResult = await syncConnections({
-      extractConnections: async () => {
-        return extractConnectionCardsFromPage(page, { limit: answers.connectionLimit, log });
+      extractConnections: async (options = {}) => {
+        return extractConnectionCardsFromPage(page, { ...options, log });
       },
       inventoryRepository: new ConnectionInventoryRepository(client),
-      account: answers.linkedinAccount
+      account: answers.linkedinAccount,
+      limit: answers.connectionLimit
     });
     logStepSummary(syncResult, log);
 
-    const profileUrls = syncResult.connections.map((connection) => connection.linkedinProfileUrl).filter(Boolean);
-    const inventoryRows = await findInventoryRowsByProfileUrls(client, profileUrls);
-    const inventoryIds = inventoryRows.map((row) => row.id);
+    const profileUrls = (
+      syncResult.profileUrls?.length
+        ? syncResult.profileUrls
+        : syncResult.connections.map((connection) => connection.linkedinProfileUrl)
+    ).filter(Boolean);
+    const inventoryRows = syncResult.inventoryIds?.length
+      ? []
+      : await findInventoryRowsByProfileUrls(client, profileUrls);
+    const inventoryIds = syncResult.inventoryIds?.length
+      ? syncResult.inventoryIds
+      : inventoryRows.map((row) => row.id);
 
     log("Step 2/8: process-queue");
     logStepSummary(await processProfiles({

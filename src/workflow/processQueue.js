@@ -117,37 +117,12 @@ export function createPlaywrightProfileExtractor(page, options = {}) {
     await page.waitForLoadState?.("networkidle", { timeout: 10000 }).catch(() => {});
     await waitForLinkedInBlockersToClear(page, { log: options.log });
 
-    const profileCapture = await page.evaluate(() => {
-      const main = document.querySelector("main");
-      const sections = [...document.querySelectorAll("main section")]
-        .filter((section) => !section.querySelector("section"))
-        .map((section) => ({
-          text: section.innerText || "",
-          html: section.outerHTML || ""
-        }));
-      if (sections.length > 0) {
-        return {
-          sections,
-          rawText: main?.innerText || document.body?.innerText || "",
-          rawHtml: main?.outerHTML || document.body?.outerHTML || ""
-        };
-      }
-      return {
-        sections: [
-          {
-            text: main?.innerText || document.body?.innerText || "",
-            html: main?.outerHTML || document.body?.outerHTML || ""
-          }
-        ],
-        rawText: main?.innerText || document.body?.innerText || "",
-        rawHtml: main?.outerHTML || document.body?.outerHTML || ""
-      };
-    });
+    const profileCapture = await captureLinkedInMainDom(page);
     const normalizedCapture = normalizeProfileCapture(profileCapture);
     const profileSections = normalizeProfileSections(normalizedCapture.sections);
     const headerSection = findProfileHeaderSection(profileSections);
     const aboutSection = findSectionByHeading(profileSections, "About");
-    const experienceSection = findSectionByHeading(profileSections, "Experience");
+    let experienceSection = findSectionByHeading(profileSections, "Experience");
     const profileContent = extractProfileMainContent(profileSections);
     const profileText = profileContent.text;
     const rawProfileText = normalizedCapture.rawText || htmlToVisibleText(normalizedCapture.rawHtml);
@@ -170,14 +145,34 @@ export function createPlaywrightProfileExtractor(page, options = {}) {
     const experienceText = experienceSection?.text
       ? stripSectionHeading(experienceSection.text, "Experience")
       : sectionAfterHeading(profileText, "Experience");
-    const { currentRoleTitle, currentRoleStartDate, jobHistory } = parseExperienceFacts(
+    let { currentRoleTitle, currentRoleStartDate, jobHistory } = parseExperienceFacts(
       experienceText,
       null,
       headline
     );
+    let experienceHtml = experienceSection?.html ?? "";
+
+    if (jobHistory.length === 0) {
+      const detailsCapture = await captureLinkedInExperienceDetails(page, sourceUrl, { log: options.log });
+      if (detailsCapture) {
+        const detailSections = normalizeProfileSections(normalizeProfileCapture(detailsCapture).sections);
+        experienceSection = findSectionByHeading(detailSections, "Experience") ?? detailSections[0] ?? null;
+        const detailsText = experienceSection?.text
+          ? stripSectionHeading(experienceSection.text, "Experience")
+          : sectionAfterHeading(extractProfileMainContent(detailSections).text, "Experience");
+        const detailsFacts = parseExperienceFacts(detailsText, null, headline);
+        if (detailsFacts.jobHistory.length > 0) {
+          currentRoleTitle = detailsFacts.currentRoleTitle;
+          currentRoleStartDate = detailsFacts.currentRoleStartDate;
+          jobHistory = detailsFacts.jobHistory;
+          experienceHtml = experienceSection?.html ?? "";
+        }
+      }
+    }
+
     const currentJob = jobHistory[0] ?? null;
     const currentCompany = extractCurrentCompanyFromProfileHtml(
-      [experienceSection?.html, headerSection?.html, normalizedCapture.rawHtml].filter(Boolean).join("\n"),
+      [experienceHtml, headerSection?.html, normalizedCapture.rawHtml].filter(Boolean).join("\n"),
       currentJob?.companyName ?? headline ?? headerText
     );
     const currentCompanyName = currentJob?.companyName ?? currentCompany.name;
@@ -206,6 +201,54 @@ export function createPlaywrightProfileExtractor(page, options = {}) {
       }
     };
   };
+}
+
+async function captureLinkedInMainDom(page) {
+  return page.evaluate(() => {
+    const main = document.querySelector("main");
+    const sections = [...document.querySelectorAll("main section")]
+      .filter((section) => !section.querySelector("section"))
+      .map((section) => ({
+        text: section.innerText || "",
+        html: section.outerHTML || ""
+      }));
+    if (sections.length > 0) {
+      return {
+        sections,
+        rawText: main?.innerText || document.body?.innerText || "",
+        rawHtml: main?.outerHTML || document.body?.outerHTML || ""
+      };
+    }
+    return {
+      sections: [
+        {
+          text: main?.innerText || document.body?.innerText || "",
+          html: main?.outerHTML || document.body?.outerHTML || ""
+        }
+      ],
+      rawText: main?.innerText || document.body?.innerText || "",
+      rawHtml: main?.outerHTML || document.body?.outerHTML || ""
+    };
+  });
+}
+
+async function captureLinkedInExperienceDetails(page, profileUrl, options = {}) {
+  const detailsUrl = buildLinkedInExperienceDetailsUrl(profileUrl);
+  if (!detailsUrl) return null;
+
+  await page.goto(detailsUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState?.("networkidle", { timeout: 10000 }).catch(() => {});
+  await page.evaluate(async () => {
+    for (let index = 0; index < 6; index += 1) {
+      window.scrollBy(0, 900);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    window.scrollTo(0, 0);
+  }).catch(() => {});
+  await waitForLinkedInBlockersToClear(page, { log: options.log });
+  const capture = await captureLinkedInMainDom(page);
+  const text = capture.rawText || capture.sections?.map((section) => section.text).join("\n\n") || "";
+  return /(^|\n)Experience(\n|$)/i.test(text) ? capture : null;
 }
 
 function normalizeProfileCapture(profileCapture) {
@@ -546,10 +589,10 @@ function findExperienceRoleAnchors(lines) {
     if (!groupHeader) continue;
 
     anchors.push({
-      roleStartIndex: dateIndex - 1,
+      roleStartIndex: groupHeader.roleTitleIndex,
       groupHeaderIndex: groupHeader.index,
       dateIndex,
-      title: lines[dateIndex - 1] ?? null,
+      title: lines[groupHeader.roleTitleIndex] ?? null,
       companyName: groupHeader.companyName,
       startDate,
       endDate
@@ -559,21 +602,40 @@ function findExperienceRoleAnchors(lines) {
 }
 
 function findGroupedCompanyHeader(lines, dateIndex) {
-  for (let index = dateIndex - 2; index >= 0; index -= 1) {
-    if (!isDateLine(lines[index]) && isCompanyEmploymentLine(lines[index])) break;
+  const roleTitleIndex = findGroupedRoleTitleIndex(lines, dateIndex);
+  if (roleTitleIndex == null) return null;
+
+  for (let index = roleTitleIndex - 1; index >= 0; index -= 1) {
+    if (!isDateLine(lines[index]) && isCompanyEmploymentLine(lines[index]) && !isExperienceLocationLine(lines[index])) {
+      break;
+    }
     if (isGroupedCompanyHeaderAt(lines, index)) {
-      return { index, companyName: lines[index] };
+      return {
+        index,
+        roleTitleIndex,
+        companyName: lines[index]
+      };
     }
   }
   return null;
 }
 
+function findGroupedRoleTitleIndex(lines, dateIndex) {
+  let cursor = dateIndex - 1;
+  while (isRoleContextLine(lines[cursor])) cursor -= 1;
+  if (!lines[cursor] || isDateLine(lines[cursor]) || isExperienceNoiseLine(lines[cursor])) return null;
+  return cursor;
+}
+
 function isGroupedCompanyHeaderAt(lines, index) {
   if (!lines[index] || isExperienceNoiseLine(lines[index])) return false;
-  if (!isEmploymentSummaryLine(lines[index + 1])) return false;
+  if (!isGroupSummaryLine(lines[index + 1])) return false;
   let cursor = index + 2;
-  while (isLikelyProfileLocation(lines[cursor])) cursor += 1;
-  return Boolean(lines[cursor] && isDateLine(lines[cursor + 1]));
+  while (isGroupedCompanyContextLine(lines[cursor])) cursor += 1;
+  if (!lines[cursor] || isDateLine(lines[cursor]) || isExperienceNoiseLine(lines[cursor])) return false;
+  let dateCursor = cursor + 1;
+  while (isRoleContextLine(lines[dateCursor])) dateCursor += 1;
+  return isDateLine(lines[dateCursor]);
 }
 
 function isDateLine(line) {
@@ -586,6 +648,22 @@ function isCompanyEmploymentLine(line) {
 
 function isEmploymentSummaryLine(line) {
   return /^(Full-time|Part-time|Contract|Self-employed|Freelance|Internship|Apprenticeship|Temporary)(\s*·|$)/i.test(String(line ?? ""));
+}
+
+function isGroupSummaryLine(line) {
+  return isEmploymentSummaryLine(line) || isDurationOnlyLine(line);
+}
+
+function isDurationOnlyLine(line) {
+  return /^\d+\s+(?:yr|yrs|year|years|mo|mos|month|months)\b/i.test(String(line ?? "").trim());
+}
+
+function isGroupedCompanyContextLine(line) {
+  return isGroupSummaryLine(line) || isExperienceLocationLine(line);
+}
+
+function isRoleContextLine(line) {
+  return isEmploymentSummaryLine(line) || isExperienceLocationLine(line);
 }
 
 function parseDateRange(value) {
@@ -614,7 +692,9 @@ function isExperienceNoiseLine(line) {
 
 function isExperienceLocationLine(line) {
   const value = String(line ?? "").trim();
+  if (!value || isDateLine(value)) return false;
   if (/^(Australia|United States|United Kingdom|Canada|India|New Zealand|Singapore)$/i.test(value)) return true;
+  if (/^(Australia|United States|United Kingdom|Canada|India|New Zealand|Singapore)\s·\s(?:Remote|Hybrid|On-site)$/i.test(value)) return true;
   return value.length < 80 && value.includes(",") && !/[.!?]/.test(value);
 }
 
@@ -643,6 +723,21 @@ function toCamelInventory(row) {
     individualId: row.individual_id,
     companyId: row.company_id
   };
+}
+
+function buildLinkedInExperienceDetailsUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(value, "https://www.linkedin.com");
+    const match = url.pathname.match(/^(\/in\/[^/]+)/i);
+    if (!match) return null;
+    url.pathname = `${match[1]}/details/experience/`;
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function cleanSectionText(text) {

@@ -91,7 +91,7 @@ Use individual commands only for debugging — not during a guided batch run:
 
 ```bash
 npm run login-linkedin
-npm run sync-connections -- --dry-run
+npm run sync-connections -- --limit 10 --dry-run
 npm run process-queue -- --limit 10 --dry-run
 npm run sync-company-profiles -- --dry-run
 npm run dedupe-inventory -- --dry-run

@@ -104,6 +104,139 @@ test("syncLinkedInConnections stamps the selected LinkedIn account on records", 
   assert.equal(writes[0][0].account, "Kirk");
 });
 
+test("syncLinkedInConnections uses existing eligible inventory before scraping LinkedIn", async () => {
+  let extracted = false;
+  let wrote = false;
+  const result = await syncLinkedInConnections({
+    limit: 2,
+    extractConnections: async () => {
+      extracted = true;
+      return [];
+    },
+    inventoryRepository: {
+      listEligibleForEnrichment: async ({ limit }) => [
+        {
+          id: "inventory_1",
+          linkedinProfileUrl: "https://www.linkedin.com/in/jane-smith"
+        },
+        {
+          id: "inventory_2",
+          linkedinProfileUrl: "https://www.linkedin.com/in/john-smith"
+        }
+      ].slice(0, limit),
+      upsertMany: async () => {
+        wrote = true;
+      }
+    }
+  });
+
+  assert.equal(extracted, false);
+  assert.equal(wrote, false);
+  assert.deepEqual(result.summary, {
+    batchSize: 2,
+    existingSelected: 2,
+    discovered: 0,
+    upserted: 0
+  });
+  assert.deepEqual(result.profileUrls, [
+    "https://www.linkedin.com/in/jane-smith",
+    "https://www.linkedin.com/in/john-smith"
+  ]);
+  assert.deepEqual(result.inventoryIds, ["inventory_1", "inventory_2"]);
+});
+
+test("syncLinkedInConnections tops up existing eligible inventory from new LinkedIn connections", async () => {
+  const writes = [];
+  const result = await syncLinkedInConnections({
+    limit: 3,
+    extractConnections: async ({ limit }) => {
+      assert.equal(limit, 2);
+      return normalizeConnectionCards([
+        {
+          profileHref: "https://www.linkedin.com/in/processed-person/",
+          text: "Processed Person\nFounder at Old Co"
+        },
+        {
+          profileHref: "https://www.linkedin.com/in/new-person/",
+          text: "New Person\nFounder at New Co"
+        },
+        {
+          profileHref: "https://www.linkedin.com/in/another-new-person/",
+          text: "Another New Person\nCTO at New Co"
+        }
+      ]);
+    },
+    inventoryRepository: {
+      listEligibleForEnrichment: async () => [
+        {
+          id: "inventory_1",
+          linkedinProfileUrl: "https://www.linkedin.com/in/jane-smith"
+        }
+      ],
+      findByProfileUrls: async (profileUrls) =>
+        profileUrls
+          .filter((url) => url === "https://www.linkedin.com/in/processed-person")
+          .map((url) => ({
+            id: "processed_1",
+            linkedinProfileUrl: url,
+            workflowStatus: "submitted",
+            dedupeStatus: "dedupe_pending"
+          })),
+      upsertMany: async (records) => {
+        writes.push(records);
+        return { upserted: records.length };
+      }
+    },
+    account: "Kirk"
+  });
+
+  assert.equal(result.summary.batchSize, 3);
+  assert.equal(result.summary.existingSelected, 1);
+  assert.equal(result.summary.discovered, 2);
+  assert.equal(result.summary.upserted, 2);
+  assert.deepEqual(writes[0].map((record) => record.linkedinProfileUrl), [
+    "https://www.linkedin.com/in/new-person",
+    "https://www.linkedin.com/in/another-new-person"
+  ]);
+  assert.equal(writes[0][0].account, "Kirk");
+  assert.deepEqual(result.profileUrls, [
+    "https://www.linkedin.com/in/jane-smith",
+    "https://www.linkedin.com/in/new-person",
+    "https://www.linkedin.com/in/another-new-person"
+  ]);
+});
+
+test("syncLinkedInConnections dry-run reports top-up batch without writing inventory", async () => {
+  let wrote = false;
+  const result = await syncLinkedInConnections({
+    limit: 1,
+    extractConnections: async () =>
+      normalizeConnectionCards([
+        {
+          profileHref: "https://www.linkedin.com/in/new-person/",
+          text: "New Person\nFounder at New Co"
+        }
+      ]),
+    inventoryRepository: {
+      listEligibleForEnrichment: async () => [],
+      findByProfileUrls: async () => [],
+      upsertMany: async () => {
+        wrote = true;
+      }
+    },
+    dryRun: true
+  });
+
+  assert.equal(wrote, false);
+  assert.equal(result.status, "dry_run");
+  assert.deepEqual(result.summary, {
+    batchSize: 1,
+    existingSelected: 0,
+    discovered: 1,
+    upserted: 0
+  });
+});
+
 test("ConnectionInventoryRepository upserts by normalized profile URL", async () => {
   const queries = [];
   const repository = new ConnectionInventoryRepository({

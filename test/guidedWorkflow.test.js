@@ -199,35 +199,47 @@ test("runGuidedWorkflow skipFinalization stops before submit-qualified and final
         }
       };
     },
-    async syncLinkedInConnections() {
+    async syncLinkedInConnections(input) {
       calls.push("sync-connections");
+      assert.equal(input.limit, 1);
       return {
-        connections: [{ linkedinProfileUrl: "https://www.linkedin.com/in/example" }],
+        connections: [
+          { linkedinProfileUrl: "https://www.linkedin.com/in/example" },
+          { linkedinProfileUrl: "https://www.linkedin.com/in/unselected" }
+        ],
+        profileUrls: ["https://www.linkedin.com/in/example"],
+        inventoryIds: ["inventory-1"],
         summary: { upserted: 1 }
       };
     },
-    async processQueuedProfiles() {
+    async processQueuedProfiles(input) {
       calls.push("process-queue");
+      assert.deepEqual(input.profileUrls, ["https://www.linkedin.com/in/example"]);
       return stepResult;
     },
-    async syncCompanyProfiles() {
+    async syncCompanyProfiles(input) {
       calls.push("sync-company-profiles");
+      assert.deepEqual(input.profileUrls, ["https://www.linkedin.com/in/example"]);
       return stepResult;
     },
-    async dedupeInventory() {
+    async dedupeInventory(input) {
       calls.push("dedupe-inventory");
+      assert.deepEqual(input.profileUrls, ["https://www.linkedin.com/in/example"]);
       return stepResult;
     },
-    async syncLinkedInActivityItems() {
+    async syncLinkedInActivityItems(input) {
       calls.push("sync-activities");
+      assert.deepEqual(input.profileUrls, ["https://www.linkedin.com/in/example"]);
       return stepResult;
     },
-    async scoreExtractedProfiles() {
+    async scoreExtractedProfiles(input) {
       calls.push("score-fits");
+      assert.deepEqual(input.inventoryIds, ["inventory-1"]);
       return stepResult;
     },
-    async syncCompanyWebsites() {
+    async syncCompanyWebsites(input) {
       calls.push("sync-company-websites");
+      assert.deepEqual(input.inventoryIds, ["inventory-1"]);
       return stepResult;
     },
     async submitQualifiedCandidates() {

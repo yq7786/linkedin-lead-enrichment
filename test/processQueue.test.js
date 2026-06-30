@@ -529,6 +529,198 @@ test("createPlaywrightProfileExtractor expands grouped company roles in job hist
   ]);
 });
 
+test("createPlaywrightProfileExtractor falls back to dedicated experience page when main profile omits experience", async () => {
+  const calls = [];
+  const page = {
+    async goto(url) {
+      calls.push(["goto", url]);
+    },
+    async waitForLoadState() {},
+    async evaluate() {
+      if (calls.at(-1)?.[1]?.endsWith("/details/experience/")) {
+        return {
+          sections: [
+            {
+              text: [
+                "Experience",
+                "",
+                "Packy AI",
+                "",
+                "Full-time · 2 yrs",
+                "",
+                "Australia · Remote",
+                "",
+                "Technical Lead & Senior Fullstack Engineer",
+                "",
+                "Nov 2024 - Present · 1 yr 8 mos",
+                "",
+                "Leading the engineering team at Packy AI.",
+                "",
+                "Back End Developer",
+                "",
+                "Jul 2024 - Nov 2024 · 5 mos",
+                "",
+                "Built the backend platform.",
+                "",
+                "Senior Frontend Developer",
+                "",
+                "Figy · Full-time",
+                "",
+                "Sep 2024 - Present · 1 yr 10 mos",
+                "",
+                "Netherlands · Remote",
+                "",
+                "Built a responsive wealth management dashboard."
+              ].join("\n"),
+              html: "<section><h1>Experience</h1><a href=\"https://www.linkedin.com/company/packy-ai/\">Packy AI</a></section>"
+            }
+          ],
+          rawHtml: "<main></main>"
+        };
+      }
+
+      return {
+        sections: [
+          {
+            text: [
+              "Temple Ndukwu",
+              "",
+              "Full-Stack Engineer | Senior Frontend & Backend | TypeScript, Node.js, React",
+              "",
+              "Contact info"
+            ].join("\n"),
+            html: "<section><h1>Temple Ndukwu</h1></section>"
+          },
+          {
+            text: ["About", "", "Full-stack engineer with 5+ years shipping production software."].join("\n"),
+            html: "<section><h2>About</h2></section>"
+          }
+        ],
+        rawHtml: "<main></main>"
+      };
+    }
+  };
+
+  const capture = await createPlaywrightProfileExtractor(page)({
+    linkedinProfileUrl: "https://www.linkedin.com/in/temple-ndukwu-8b2260237",
+    fullName: "Temple Ndukwu"
+  });
+
+  assert.deepEqual(calls.map((call) => call[1]), [
+    "https://www.linkedin.com/in/temple-ndukwu-8b2260237",
+    "https://www.linkedin.com/in/temple-ndukwu-8b2260237/details/experience/"
+  ]);
+  assert.equal(capture.facts.currentCompanyName, "Packy AI");
+  assert.equal(capture.facts.currentCompanyLinkedInUrl, "https://www.linkedin.com/company/packy-ai");
+  assert.equal(capture.facts.currentRoleTitle, "Technical Lead & Senior Fullstack Engineer");
+  assert.deepEqual(capture.facts.jobHistory.slice(0, 3), [
+    {
+      title: "Technical Lead & Senior Fullstack Engineer",
+      companyName: "Packy AI",
+      startDate: "Nov 2024",
+      endDate: null,
+      description: "Leading the engineering team at Packy AI."
+    },
+    {
+      title: "Back End Developer",
+      companyName: "Packy AI",
+      startDate: "Jul 2024",
+      endDate: "Nov 2024",
+      description: "Built the backend platform."
+    },
+    {
+      title: "Senior Frontend Developer",
+      companyName: "Figy",
+      startDate: "Sep 2024",
+      endDate: null,
+      description: "Built a responsive wealth management dashboard."
+    }
+  ]);
+});
+
+test("createPlaywrightProfileExtractor parses company duration groups with role employment lines", async () => {
+  const page = {
+    async goto() {},
+    async waitForLoadState() {},
+    async evaluate() {
+      return {
+        sections: [
+          {
+            text: [
+              "Amy Nelson",
+              "",
+              "Account Relationship Manager | Bachelor of Business Administration",
+              "",
+              "North Adelaide, South Australia, Australia"
+            ].join("\n"),
+            html: "<section><h1>Amy Nelson</h1></section>"
+          },
+          {
+            text: [
+              "Experience",
+              "",
+              "Bizmaxus Pty Ltd.",
+              "",
+              "4 yrs 3 mos",
+              "",
+              "Senior Account Manager",
+              "",
+              "Full-time",
+              "",
+              "Aug 2024 - Present · 1 yr 11 mos",
+              "",
+              "Account Relationship Manager",
+              "",
+              "Apr 2022 - Present · 4 yrs 3 mos",
+              "",
+              "Customer Service Representative",
+              "",
+              "IBM · Full-time",
+              "",
+              "Mar 2020 - Mar 2022 · 2 yrs 1 mo",
+              "",
+              "Sydney, New South Wales, Australia · On-site"
+            ].join("\n"),
+            html: "<section><h2>Experience</h2><a href=\"https://www.linkedin.com/company/bizmaxus/\">Bizmaxus Pty Ltd.</a></section>"
+          }
+        ],
+        rawHtml: "<main></main>"
+      };
+    }
+  };
+
+  const capture = await createPlaywrightProfileExtractor(page)({
+    linkedinProfileUrl: "https://www.linkedin.com/in/amy-nelson-a78087310",
+    fullName: "Amy Nelson"
+  });
+
+  assert.equal(capture.facts.currentCompanyName, "Bizmaxus Pty Ltd.");
+  assert.equal(capture.facts.currentRoleTitle, "Senior Account Manager");
+  assert.deepEqual(capture.facts.jobHistory.slice(0, 3), [
+    {
+      title: "Senior Account Manager",
+      companyName: "Bizmaxus Pty Ltd.",
+      startDate: "Aug 2024",
+      endDate: null,
+      description: null
+    },
+    {
+      title: "Account Relationship Manager",
+      companyName: "Bizmaxus Pty Ltd.",
+      startDate: "Apr 2022",
+      endDate: null,
+      description: null
+    },
+    {
+      title: "Customer Service Representative",
+      companyName: "IBM",
+      startDate: "Mar 2020",
+      endDate: "Mar 2022",
+      description: null
+    }
+  ]);
+});
+
 test("createPlaywrightProfileExtractor navigates to profile and captures structured facts", async () => {
   const calls = [];
   const page = {
@@ -565,11 +757,12 @@ test("createPlaywrightProfileExtractor navigates to profile and captures structu
   assert.equal(capture.facts.currentRoleTitle, "Founder");
   assert.equal("rawText" in capture, false);
   assert.equal("rawHtml" in capture, false);
-  assert.deepEqual(calls, [
+  assert.deepEqual(calls.slice(0, 3), [
     ["goto", "https://www.linkedin.com/in/jane-smith", "domcontentloaded"],
     ["waitForLoadState", "networkidle", 10000],
     ["evaluate"]
   ]);
+  assert.equal(calls.some((call) => call[1] === "https://www.linkedin.com/in/jane-smith/details/experience/"), true);
 });
 
 test("createPlaywrightProfileExtractor falls back to raw profile text for header location", async () => {
