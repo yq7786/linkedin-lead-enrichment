@@ -54,11 +54,7 @@ PORTAL_QUALIFIED_INGEST_URL=...
 PORTAL_CALLBACK_SECRET=...
 ```
 
-Create the workflow tables in your database:
-
-```bash
-npm run migrate-db
-```
+The required workflow tables are expected to already exist in the configured database.
 
 ## Local Skill Install Options
 
@@ -104,7 +100,7 @@ If LinkedIn is not logged in, the workflow opens the persistent Playwright brows
 After collecting inputs in chat and writing `.env` (agent or operator):
 
 ```bash
-npm run guided-workflow -- --account kathryb --limit 10
+npm run guided-workflow -- --account kathryn --limit 10
 ```
 
 Optimization/testing mode, which skips `submit-qualified` and the final status summary:

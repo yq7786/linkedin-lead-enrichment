@@ -118,7 +118,7 @@ test("askGuidedWorkflowQuestions accepts env values at once before account and l
       }
       if (text.includes("LinkedIn Account") && !answered.has("account")) {
         answered.add("account");
-        inputStream.write("kathryb\n");
+        inputStream.write("kathryn\n");
       }
       if (text.includes("Number of connections") && !answered.has("limit")) {
         answered.add("limit");
@@ -135,7 +135,7 @@ test("askGuidedWorkflowQuestions accepts env values at once before account and l
     openaiApiKey: "sk-test",
     portalQualifiedIngestUrl: "https://portal.example/ingest",
     portalCallbackSecret: "secret",
-    linkedinAccount: "kathryb",
+    linkedinAccount: "kathryn",
     connectionLimit: 3
   });
   assert.match(output.join(""), /High connection counts can hit LinkedIn usage limits or paid API limits/);
@@ -239,7 +239,7 @@ test("runGuidedWorkflow skipFinalization stops before submit-qualified and final
       openaiApiKey: "sk-test",
       portalQualifiedIngestUrl: "https://portal.example/ingest",
       portalCallbackSecret: "secret",
-      linkedinAccount: "kathryb",
+      linkedinAccount: "kathryn",
       connectionLimit: 1
     },
     cwd: directory,

@@ -28,7 +28,6 @@ cd linkedin-lead-enrichment
 ```bash
 npm run setup-project
 cp .env.example .env
-npm run migrate-db
 ```
 
 ## Run a batch

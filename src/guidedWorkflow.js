@@ -41,7 +41,7 @@ import {
 } from "./workflow/submitQualifiedCandidates.js";
 import { CompanyWebsiteRepository, syncCompanyWebsites } from "./workflow/syncCompanyWebsites.js";
 
-export const LINKEDIN_ACCOUNT_CHOICES = ["kirk", "kathryb", "terri", "sarah", "ice", "siriluk"];
+export const LINKEDIN_ACCOUNT_CHOICES = ["kirk", "kathryn", "terri", "sarah", "ice", "siriluk"];
 
 export function resolveGuidedWorkflowAnswers({ env = process.env, account, limit } = {}) {
   loadDotenv(env);

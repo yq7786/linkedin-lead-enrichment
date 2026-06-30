@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import fs from "node:fs/promises";
 import path from "node:path";
 
 import { validateConfig } from "./config.js";
@@ -57,22 +56,6 @@ async function main() {
     const dryRun = args.includes("--dry-run");
     const config = validateConfig(process.env, { dryRun });
     console.log(`Configuration OK. Default batch limit: ${config.defaultBatchLimit}`);
-    return;
-  }
-
-  if (command === "migrate-db") {
-    const config = validateConfig(process.env, {
-      dryRun: true,
-      requireOpenAI: false
-    });
-    const client = await connectedDbClient(config.databaseUrl);
-    try {
-      const sql = await fs.readFile(path.join(process.cwd(), "sql/001_workflow_tables.sql"), "utf8");
-      await client.query(sql);
-      console.log("Database migration applied: sql/001_workflow_tables.sql");
-    } finally {
-      await client.end();
-    }
     return;
   }
 
@@ -378,7 +361,6 @@ function printHelp() {
 
 Commands:
   check-config [--dry-run]
-  migrate-db
   inspect-status
   login-linkedin
   guided-workflow [--skip-finalization] [--account NAME] [--limit N]

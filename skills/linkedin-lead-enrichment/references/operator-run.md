@@ -13,7 +13,7 @@ Collect configuration in chat, then run the CLI without duplicate prompts.
    - `OPENAI_API_KEY`
    - `PORTAL_QUALIFIED_INGEST_URL`
    - `PORTAL_CALLBACK_SECRET`
-   - LinkedIn account: `kirk`, `kathryb`, `terri`, `sarah`, `ice`, `siriluk`, or a custom account name (stored in `linkedin_connection_inventory.account`)
+   - LinkedIn account: `kirk`, `kathryn`, `terri`, `sarah`, `ice`, `siriluk`, or a custom account name (stored in `linkedin_connection_inventory.account`)
    - Number of connections to process — warn that processing too many connections at once might hit LinkedIn usage limits or paid API limits
 2. Write `.env` with the four env keys.
 3. Run:
@@ -44,7 +44,6 @@ Run `npm run guided-workflow` and answer the built-in prompts (bulk env paste or
 
 ```bash
 npm run setup-project
-npm run migrate-db
 node src/cli.js check-config --dry-run
 ```
 
