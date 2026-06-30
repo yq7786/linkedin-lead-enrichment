@@ -27,7 +27,13 @@ export async function extractConnectionCardsFromPage(page, options = {}) {
     }
 
     if (resultLimit && normalized.length >= resultLimit) break;
-    if (pass >= (options.scrollPasses ?? 3) && stablePasses >= stableScrollPasses) break;
+
+    const belowScanTarget = resultLimit && normalized.length < resultLimit;
+    const reachedScrollBudget = pass >= maxScrollPasses;
+    if ((!belowScanTarget || reachedScrollBudget) && pass >= (options.scrollPasses ?? 3) && stablePasses >= stableScrollPasses) {
+      break;
+    }
+
     await autoScroll(page, 1);
     await waitForLinkedInBlockersToClear(page, { log: options.log });
   }
@@ -349,8 +355,33 @@ export class ConnectionInventoryRepository {
 
 async function autoScroll(page, passes) {
   for (let index = 0; index < passes; index += 1) {
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await page.waitForTimeout?.(500);
+    await page.evaluate(() => {
+      const scrollToBottom = (element) => {
+        if (!element) return;
+        element.scrollTop = element.scrollHeight;
+      };
+
+      for (const selector of [
+        ".scaffold-finite-scroll__content",
+        ".scaffold-finite-scroll",
+        '[data-view-name="connections-list"]',
+        "main.scaffold-layout__main",
+        "main"
+      ]) {
+        scrollToBottom(document.querySelector(selector));
+      }
+
+      scrollToBottom(document.scrollingElement ?? document.documentElement);
+      window.scrollTo(0, document.body.scrollHeight);
+      window.scrollBy(0, window.innerHeight);
+    });
+
+    if (page.keyboard?.press) {
+      await page.keyboard.press("PageDown").catch(() => {});
+      await page.keyboard.press("End").catch(() => {});
+    }
+
+    await page.waitForTimeout?.(800);
   }
 }
 
