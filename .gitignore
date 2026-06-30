@@ -5,6 +5,7 @@
 .lead-enrichment-candidates/
 .lead-enrichment-snapshots/
 .DS_Store
-docs/.DS_Store
+.cursor/
+docs/
 node_modules/
 npm-debug.log*
