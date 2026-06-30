@@ -149,7 +149,7 @@ export class SubmitQualifiedCandidatesRepository {
     await this.client.query(
       `update linkedin_connection_inventory
        set workflow_status = $2,
-           current_step = 'submit_qualified',
+           current_step = 'qualified',
            failed_at = now(),
            retry_count = case when $3 = 'retryable' then retry_count + 1 else retry_count end,
            next_retry_at = case

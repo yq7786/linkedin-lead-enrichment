@@ -134,6 +134,7 @@ async function syncUsefulConnectionBatch({
   let discovered = [];
   let upserted = 0;
   let exhausted = remaining > 0;
+  let scanAttempts = 0;
 
   if (remaining > 0) {
     const discoveryResult = await discoverTopUpConnections({
@@ -144,6 +145,7 @@ async function syncUsefulConnectionBatch({
     });
     discovered = discoveryResult.discovered;
     exhausted = discoveryResult.exhausted;
+    scanAttempts = discoveryResult.scanAttempts;
 
     if (!dryRun && discovered.length > 0) {
       const result = await inventoryRepository.upsertMany(discovered);
@@ -172,7 +174,9 @@ async function syncUsefulConnectionBatch({
       existingSelected: existingConnections.length,
       discovered: discovered.length,
       upserted,
-      exhausted
+      remaining: Math.max(0, limit - connections.length),
+      exhausted,
+      scanAttempts
     },
     upserted
   };
@@ -191,8 +195,10 @@ async function discoverTopUpConnections({
   ];
   let discovered = [];
   let lastExtractedCount = 0;
+  let scanAttempts = 0;
 
   for (const attempt of attempts) {
+    scanAttempts += 1;
     const extracted = (await extractConnections({
       limit: remaining,
       scanLimit: attempt.scanLimit,
@@ -221,13 +227,14 @@ async function discoverTopUpConnections({
       .slice(0, remaining);
 
     if (discovered.length >= remaining) {
-      return { discovered, exhausted: false };
+      return { discovered, exhausted: false, scanAttempts };
     }
   }
 
   return {
     discovered,
-    exhausted: discovered.length < remaining && lastExtractedCount < attempts.at(-1).scanLimit
+    exhausted: discovered.length < remaining && lastExtractedCount < attempts.at(-1).scanLimit,
+    scanAttempts
   };
 }
 

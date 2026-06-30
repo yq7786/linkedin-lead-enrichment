@@ -31,7 +31,7 @@ test("validateConfig allows missing portal config in dry-run mode", () => {
   );
 
   assert.equal(config.dryRun, true);
-  assert.equal(config.defaultBatchLimit, 10);
+  assert.equal(config.defaultBatchLimit, 50);
 });
 
 test("validateConfig defaults LinkedIn browser profile path when omitted", () => {

@@ -139,7 +139,9 @@ test("syncLinkedInConnections uses existing eligible inventory before scraping L
     existingSelected: 2,
     discovered: 0,
     upserted: 0,
-    exhausted: false
+    remaining: 0,
+    exhausted: false,
+    scanAttempts: 0
   });
   assert.deepEqual(result.profileUrls, [
     "https://www.linkedin.com/in/jane-smith",
@@ -266,7 +268,9 @@ test("syncLinkedInConnections keeps scanning until the requested limit is filled
   assert.equal(result.summary.requested, 20);
   assert.equal(result.summary.batchSize, 20);
   assert.equal(result.summary.discovered, 20);
+  assert.equal(result.summary.remaining, 0);
   assert.equal(result.summary.exhausted, false);
+  assert.equal(result.summary.scanAttempts, 2);
   assert.equal(writes[0].length, 20);
   assert.equal(writes[0][0].linkedinProfileUrl, "https://www.linkedin.com/in/new-person-1");
   assert.equal(writes[0][19].linkedinProfileUrl, "https://www.linkedin.com/in/new-person-20");
@@ -336,7 +340,9 @@ test("syncLinkedInConnections dry-run reports top-up batch without writing inven
     existingSelected: 0,
     discovered: 1,
     upserted: 0,
-    exhausted: false
+    remaining: 0,
+    exhausted: false,
+    scanAttempts: 1
   });
 });
 

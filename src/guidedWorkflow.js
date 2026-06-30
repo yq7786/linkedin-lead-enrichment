@@ -42,6 +42,8 @@ import {
 import { CompanyWebsiteRepository, syncCompanyWebsites } from "./workflow/syncCompanyWebsites.js";
 
 export const LINKEDIN_ACCOUNT_CHOICES = ["kirk", "kathryn", "terri", "sarah", "ice", "siriluk"];
+export const DEFAULT_GUIDED_WORKFLOW_BATCH_SIZE = 50;
+export const DEFAULT_PARTIAL_SYNC_RETRIES = 2;
 
 export function resolveGuidedWorkflowAnswers({ env = process.env, account, limit } = {}) {
   loadDotenv(env);
@@ -113,15 +115,20 @@ export async function runGuidedWorkflow({
     OPENAI_API_KEY: answers.openaiApiKey,
     PORTAL_QUALIFIED_INGEST_URL: answers.portalQualifiedIngestUrl,
     PORTAL_CALLBACK_SECRET: answers.portalCallbackSecret,
-    DEFAULT_BATCH_LIMIT: String(answers.connectionLimit)
+    DEFAULT_BATCH_LIMIT: String(DEFAULT_GUIDED_WORKFLOW_BATCH_SIZE)
   };
   const envPath = path.join(cwd, ".env");
   await writeLocalEnvFile(envPath, envValues);
   Object.assign(env, envValues);
 
   const config = (dependencies.validateConfig ?? validateConfig)(env, { dryRun: false });
+  const maxBatchSize = dependencies.maxGuidedWorkflowBatchSize ?? config.defaultBatchLimit ?? DEFAULT_GUIDED_WORKFLOW_BATCH_SIZE;
+  const batchLimits = createGuidedWorkflowBatchLimits(answers.connectionLimit, maxBatchSize);
   log(`Configuration saved to ${envPath}`);
   log(`Processing up to ${answers.connectionLimit} LinkedIn connections for account: ${answers.linkedinAccount}`);
+  if (batchLimits.length > 1) {
+    log(`Requests above ${maxBatchSize} connections will run in ${batchLimits.length} sequential batches.`);
+  }
   if (skipFinalization) {
     log("Testing mode enabled: skipping submit-qualified and final status summary.");
   }
@@ -141,6 +148,7 @@ export async function runGuidedWorkflow({
   const syncWebsites = dependencies.syncCompanyWebsites ?? syncCompanyWebsites;
   const submitCandidates = dependencies.submitQualifiedCandidates ?? submitQualifiedCandidates;
   const waitForLogin = dependencies.waitForLinkedInLogin ?? waitForLinkedInLogin;
+  const maxPartialSyncRetries = dependencies.maxPartialSyncRetries ?? DEFAULT_PARTIAL_SYNC_RETRIES;
   let context;
   try {
     await ensureInventoryAccountColumn(client);
@@ -156,124 +164,184 @@ export async function runGuidedWorkflow({
 
     await ensureLinkedInSession(page, { waitForLogin, log });
 
-    log("Step 1/8: sync-connections");
-    const syncResult = await syncConnections({
-      extractConnections: async (options = {}) => {
-        return extractConnectionCardsFromPage(page, { ...options, log });
-      },
-      inventoryRepository: new ConnectionInventoryRepository(client),
-      account: answers.linkedinAccount,
-      limit: answers.connectionLimit
-    });
-    logStepSummary(syncResult, log);
+    const allProfileUrls = [];
+    let stoppedBeforeRequested = null;
 
-    const profileUrls = (
-      syncResult.profileUrls?.length
-        ? syncResult.profileUrls
-        : syncResult.connections.map((connection) => connection.linkedinProfileUrl)
-    ).filter(Boolean);
-    const inventoryRows = syncResult.inventoryIds?.length
-      ? []
-      : await findInventoryRowsByProfileUrls(client, profileUrls);
-    const inventoryIds = syncResult.inventoryIds?.length
-      ? syncResult.inventoryIds
-      : inventoryRows.map((row) => row.id);
+    for (const [batchIndex, batchLimit] of batchLimits.entries()) {
+      if (batchLimits.length > 1) {
+        log(`Batch ${batchIndex + 1}/${batchLimits.length}: processing up to ${batchLimit} connections`);
+      }
 
-    log("Step 2/8: process-queue");
-    logStepSummary(await processProfiles({
-      queueRepository: new ProcessQueueRepository(client),
-      candidateRepository,
-      extractProfile: async (item) => createPlaywrightProfileExtractor(page, { log })(item),
-      limit: answers.connectionLimit,
-      profileUrls
-    }), log);
+      let remainingBatchLimit = batchLimit;
+      let partialSyncRetries = 0;
 
-    log("Step 3/8: sync-company-profiles");
-    logStepSummary(await syncCompanies({
-      repository: new CompanyProfileRepository(client),
-      candidateRepository,
-      extractCompany: async (item) => extractCompanyProfileFromPage(page, { companyUrl: item.currentCompanyUrl, log }),
-      limit: answers.connectionLimit,
-      profileUrls
-    }), log);
+      while (remainingBatchLimit > 0) {
+        log("Step 1/8: sync-connections");
+        const syncResult = await syncConnections({
+          extractConnections: async (options = {}) => {
+            return extractConnectionCardsFromPage(page, { ...options, log });
+          },
+          inventoryRepository: new ConnectionInventoryRepository(client),
+          account: answers.linkedinAccount,
+          limit: remainingBatchLimit
+        });
+        logStepSummary(syncResult, log);
 
-    log("Step 4/8: dedupe-inventory");
-    logStepSummary(await dedupeRows({
-      inventoryRepository: new DedupeInventoryRepository(client),
-      limit: answers.connectionLimit,
-      profileUrls
-    }), log);
+        const profileUrls = (
+          syncResult.profileUrls?.length
+            ? syncResult.profileUrls
+            : syncResult.connections.map((connection) => connection.linkedinProfileUrl)
+        ).filter(Boolean);
 
-    log("Step 5/8: sync-activities");
-    const activityRepository = new ActivityItemsRepository(client);
-    logStepSummary(await syncActivities({
-      inventoryRepository: activityRepository,
-      activityRepository,
-      candidateRepository,
-      extractActivities: async (item) =>
-        extractActivityItemsFromPage(page, {
-          profileUrl: item.linkedinProfileUrl,
-          limit: 10,
-          log
-        }),
-      limit: answers.connectionLimit,
-      profileUrls
-    }), log);
+        if (profileUrls.length > 0) {
+          const inventoryRows = syncResult.inventoryIds?.length
+            ? []
+            : await findInventoryRowsByProfileUrls(client, profileUrls);
+          const inventoryIds = syncResult.inventoryIds?.length
+            ? syncResult.inventoryIds
+            : inventoryRows.map((row) => row.id);
 
-    log("Step 6/8: score-fits");
-    logStepSummary(await scoreProfiles({
-      candidateRepository,
-      repository: new ScoreExtractedProfilesRepository(client),
-      limit: answers.connectionLimit,
-      inventoryIds
-    }), log);
+          log("Step 2/8: process-queue");
+          logStepSummary(await processProfiles({
+            queueRepository: new ProcessQueueRepository(client),
+            candidateRepository,
+            extractProfile: async (item) => createPlaywrightProfileExtractor(page, { log })(item),
+            limit: remainingBatchLimit,
+            profileUrls
+          }), log);
 
-    log("Step 7/8: sync-company-websites");
-    logStepSummary(await syncWebsites({
-      candidateRepository,
-      repository: new CompanyWebsiteRepository(client),
-      captureWebsite: async (url) => captureCompanyWebsiteWithPlaywright(page, url),
-      limit: answers.connectionLimit,
-      inventoryIds
-    }), log);
+          log("Step 3/8: sync-company-profiles");
+          logStepSummary(await syncCompanies({
+            repository: new CompanyProfileRepository(client),
+            candidateRepository,
+            extractCompany: async (item) => extractCompanyProfileFromPage(page, { companyUrl: item.currentCompanyUrl, log }),
+            limit: remainingBatchLimit,
+            profileUrls
+          }), log);
+
+          log("Step 4/8: dedupe-inventory");
+          logStepSummary(await dedupeRows({
+            inventoryRepository: new DedupeInventoryRepository(client),
+            limit: remainingBatchLimit,
+            profileUrls
+          }), log);
+
+          log("Step 5/8: sync-activities");
+          const activityRepository = new ActivityItemsRepository(client);
+          logStepSummary(await syncActivities({
+            inventoryRepository: activityRepository,
+            activityRepository,
+            candidateRepository,
+            extractActivities: async (item) =>
+              extractActivityItemsFromPage(page, {
+                profileUrl: item.linkedinProfileUrl,
+                limit: 10,
+                log
+              }),
+            limit: remainingBatchLimit,
+            profileUrls
+          }), log);
+
+          log("Step 6/8: score-fits");
+          logStepSummary(await scoreProfiles({
+            candidateRepository,
+            repository: new ScoreExtractedProfilesRepository(client),
+            limit: remainingBatchLimit,
+            inventoryIds
+          }), log);
+
+          log("Step 7/8: sync-company-websites");
+          logStepSummary(await syncWebsites({
+            candidateRepository,
+            repository: new CompanyWebsiteRepository(client),
+            captureWebsite: async (url) => captureCompanyWebsiteWithPlaywright(page, url),
+            limit: remainingBatchLimit,
+            inventoryIds
+          }), log);
+
+          if (!skipFinalization) {
+            log("Step 8/8: submit-qualified");
+            logStepSummary(await submitCandidates({
+              candidateRepository,
+              portalCandidates: new PortalCandidateAdapter({
+                endpointUrl: config.portalQualifiedIngestUrl,
+                callbackSecret: config.portalCallbackSecret
+              }),
+              repository: new SubmitQualifiedCandidatesRepository(client),
+              limit: remainingBatchLimit,
+              inventoryIds
+            }), log);
+          }
+
+          allProfileUrls.push(...profileUrls);
+          remainingBatchLimit -= profileUrls.length;
+          if (remainingBatchLimit <= 0) break;
+        }
+
+        const requested = syncResult.summary?.requested ?? remainingBatchLimit;
+        const batchSize = syncResult.summary?.batchSize ?? profileUrls.length;
+        if (syncResult.summary?.exhausted) {
+          stoppedBeforeRequested = `Sync exhausted after preparing ${batchSize} of ${requested} requested; ${remainingBatchLimit} remain.`;
+          log(stoppedBeforeRequested);
+          break;
+        }
+        if (partialSyncRetries >= maxPartialSyncRetries) {
+          stoppedBeforeRequested = `Partial sync prepared ${batchSize} of ${requested} requested without proving exhaustion; stopped after ${maxPartialSyncRetries} retry attempts with ${remainingBatchLimit} remaining.`;
+          log(stoppedBeforeRequested);
+          break;
+        }
+
+        partialSyncRetries += 1;
+        log(`Partial sync prepared ${batchSize} of ${requested} requested; retrying remaining ${remainingBatchLimit}`);
+      }
+
+      if (stoppedBeforeRequested) break;
+    }
 
     if (skipFinalization) {
       return {
         account: answers.linkedinAccount,
-        processed: profileUrls.length,
+        processed: allProfileUrls.length,
+        requested: answers.connectionLimit,
+        partialReason: stoppedBeforeRequested,
         skippedFinalization: true
       };
     }
 
-    log("Step 8/8: submit-qualified");
-    logStepSummary(await submitCandidates({
-      candidateRepository,
-      portalCandidates: new PortalCandidateAdapter({
-        endpointUrl: config.portalQualifiedIngestUrl,
-        callbackSecret: config.portalCallbackSecret
-      }),
-      repository: new SubmitQualifiedCandidatesRepository(client),
-      limit: answers.connectionLimit,
-      inventoryIds
-    }), log);
-
-    const statusSummary = await summarizeInventoryStatuses(client, profileUrls);
+    const statusSummary = await summarizeInventoryStatuses(client, allProfileUrls);
     printFinalStatusSummary({
       account: answers.linkedinAccount,
-      processed: profileUrls.length,
+      requested: answers.connectionLimit,
+      processed: allProfileUrls.length,
+      partialReason: stoppedBeforeRequested,
       statusSummary,
       log
     });
 
     return {
       account: answers.linkedinAccount,
-      processed: profileUrls.length,
+      processed: allProfileUrls.length,
+      requested: answers.connectionLimit,
+      partialReason: stoppedBeforeRequested,
       statusSummary
     };
   } finally {
     await context?.close();
     await client.end();
   }
+}
+
+function createGuidedWorkflowBatchLimits(totalLimit, maxBatchSize) {
+  const total = parseOptionalPositiveInteger(totalLimit) ?? DEFAULT_GUIDED_WORKFLOW_BATCH_SIZE;
+  const batchSize = parseOptionalPositiveInteger(maxBatchSize) ?? DEFAULT_GUIDED_WORKFLOW_BATCH_SIZE;
+  const batches = [];
+  let remaining = total;
+  while (remaining > 0) {
+    const next = Math.min(batchSize, remaining);
+    batches.push(next);
+    remaining -= next;
+  }
+  return batches;
 }
 
 async function ensureLinkedInSession(page, { waitForLogin, log }) {
@@ -383,9 +451,14 @@ function logStepSummary(result, log) {
   }
 }
 
-function printFinalStatusSummary({ account, processed, statusSummary, log }) {
+function printFinalStatusSummary({ account, requested, processed, partialReason, statusSummary, log }) {
   log("");
-  log(`Processed ${processed} LinkedIn connections for account: ${account}`);
+  if (requested && processed < requested) {
+    log(`Processed ${processed} of requested ${requested} LinkedIn connections for account: ${account}`);
+    if (partialReason) log(partialReason);
+  } else {
+    log(`Processed ${processed} LinkedIn connections for account: ${account}`);
+  }
   log("");
   log("Status summary:");
   for (const [status, count] of Object.entries(statusSummary)) {

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DEFAULT_BATCH_LIMIT = 10;
+const DEFAULT_BATCH_LIMIT = 50;
 const DEFAULT_LINKEDIN_BROWSER_PROFILE_DIR = ".linkedin-browser-profile";
 const DEFAULT_PORTAL_QUALIFIED_INGEST_URL =
   "https://portal.leapsheep.com/api/webhooks/lead-enrichment/qualified-ingest";

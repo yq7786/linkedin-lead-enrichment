@@ -30,7 +30,11 @@ npm run guided-workflow -- --account <account> --limit <N> --skip-finalization
 
 When `.env` is complete and `--account` / `--limit` are passed, the CLI skips interactive prompts.
 
-`--limit N` means up to N useful workflow items. Existing `discovered` + `dedupe_pending` inventory rows are selected first, and LinkedIn connection scanning only tops up the batch when there are fewer than N eligible rows already waiting. If the `sync-connections` summary returns `batchSize` lower than `requested` with `exhausted = true`, the current scanner stopped after LinkedIn stopped yielding additional unseen cards.
+`--limit N` means up to N useful workflow items. The default batch size is 50. If N is greater than 50, `guided-workflow` runs sequential batches of 50 until it reaches N or LinkedIn stops yielding new eligible rows.
+
+Within each batch, existing `discovered` + `dedupe_pending` inventory rows are selected first, and LinkedIn connection scanning only tops up that batch when there are fewer than the batch cap already waiting. If the `sync-connections` summary returns `batchSize` lower than `requested` with `exhausted = true`, the current scanner stopped after LinkedIn stopped yielding additional unseen cards.
+
+Never call a partial batch complete unless `exhausted = true`, LinkedIn shows a blocker, or a downstream hard failure stopped the workflow. If `batchSize < requested` and `exhausted` is not true, continue the guided top-up for the remaining count or report the run as partial. Use the summary fields `remaining` and `scanAttempts` to explain what happened.
 
 ### B. Interactive terminal
 

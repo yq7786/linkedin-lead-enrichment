@@ -54,6 +54,8 @@ npm run guided-workflow
 
 The guided workflow runs all steps sequentially with **one persistent browser context** until every step completes or the run fails. Do not interleave separate browser-backed CLI commands during a guided run.
 
+When `sync-connections` returns fewer rows than requested, do not call the requested batch complete unless its summary has `exhausted: true`, LinkedIn shows a blocker, or a downstream hard failure stopped the workflow. If `exhausted` is not true, keep topping up the remaining count within the guided workflow or clearly report the partial run.
+
 If LinkedIn is not logged in or shows a checkpoint, `guided-workflow` opens the persistent Playwright browser profile and waits for the user to complete login or clear the challenge before `sync-connections`. Keep that browser open. Do not tell the user to run a separate login command unless they explicitly want to pre-login.
 
 ## Reference routing
