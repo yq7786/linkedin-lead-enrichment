@@ -47,4 +47,4 @@ npm run setup-project
 node src/cli.js check-config --dry-run
 ```
 
-Do not require a separate `npm run login-linkedin` preflight. If LinkedIn is not logged in, `guided-workflow` opens the persistent browser profile and waits for the user to finish login before Step 1.
+Do not require a separate `npm run login-linkedin` preflight. If LinkedIn is not logged in or shows a checkpoint, `guided-workflow` opens the persistent browser profile and waits for the user to finish login or clear the challenge before Step 1. Keep the browser open; do not close/reopen it while the user is handling LinkedIn.

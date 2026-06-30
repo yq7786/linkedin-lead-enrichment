@@ -96,12 +96,19 @@ test("resolveGuidedWorkflowAnswers skips prompts when env and flags are complete
   }
 });
 
-test("resolveGuidedWorkflowAnswers returns null when required env is missing", () => {
-  assert.equal(resolveGuidedWorkflowAnswers({
-    env: { OPENAI_API_KEY: "sk-test" },
-    account: "kirk",
-    limit: 5
-  }), null);
+test("resolveGuidedWorkflowAnswers returns null when required env is missing", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "guided-workflow-missing-"));
+  const originalCwd = process.cwd();
+  process.chdir(directory);
+  try {
+    assert.equal(resolveGuidedWorkflowAnswers({
+      env: { OPENAI_API_KEY: "sk-test" },
+      account: "kirk",
+      limit: 5
+    }), null);
+  } finally {
+    process.chdir(originalCwd);
+  }
 });
 
 test("askGuidedWorkflowQuestions accepts env values at once before account and limit", async () => {

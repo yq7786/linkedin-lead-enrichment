@@ -43,26 +43,49 @@ test("openLinkedInLoginSession waits for LinkedIn login with the persistent prof
   ]);
 });
 
-test("openLinkedInLoginSession reports LinkedIn checkpoint blockers after operator confirmation", async () => {
+test("openLinkedInLoginSession keeps browser open while checkpoint is cleared", async () => {
+  const calls = [];
+  const responses = [
+    "Security verification checkpoint",
+    "Security verification checkpoint",
+    "LinkedIn Feed"
+  ];
   const context = {
     pages: () => [
       {
-        async goto() {},
+        async goto(url, options) {
+          calls.push(["goto", url, options.waitUntil]);
+        },
         async textContent() {
-          return "Security verification checkpoint";
+          calls.push(["textContent"]);
+          return responses.shift();
         }
       }
     ],
-    async close() {}
+    async close() {
+      calls.push(["close"]);
+    }
   };
+  const logs = [];
 
   const result = await openLinkedInLoginSession({
     profilePath: ".linkedin-browser-profile",
     createSession: async () => context,
-    waitForLogin: async (pageForLogin) => waitForLinkedInLogin(pageForLogin, { pollIntervalMs: 1, log: () => undefined })
+    waitForLogin: async (pageForLogin) => waitForLinkedInLogin(pageForLogin, {
+      pollIntervalMs: 1,
+      log: (message) => logs.push(message)
+    })
   });
 
-  assert.deepEqual(result, { status: "blocked", blocker: "linkedin_checkpoint" });
+  assert.deepEqual(result, { status: "session_ready" });
+  assert.deepEqual(calls, [
+    ["goto", "https://www.linkedin.com/login", "domcontentloaded"],
+    ["textContent"],
+    ["textContent"],
+    ["textContent"],
+    ["close"]
+  ]);
+  assert.match(logs.join("\n"), /Clear it manually in the open browser/);
 });
 
 test("waitForLinkedInLogin keeps polling while login is expired", async () => {

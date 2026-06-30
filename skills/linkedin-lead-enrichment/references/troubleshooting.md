@@ -1,8 +1,8 @@
 # Troubleshooting
 
-**LinkedIn login expired:** For guided runs, keep the persistent browser open and wait for the operator to finish login before Step 1. For manual command debugging, run `npm run login-linkedin`; it waits for a ready session and only closes the browser after login succeeds, a checkpoint appears, or the login wait times out.
+**LinkedIn login expired:** For guided runs, keep the persistent browser open and wait for the operator to finish login before Step 1. For manual command debugging, run `npm run login-linkedin`; it waits for a ready session and only closes the browser after login succeeds or the login wait times out.
 
-**CAPTCHA / checkpoint / security screen:** Stop immediately. Do not retry automatically.
+**CAPTCHA / checkpoint / security screen:** Stop automated LinkedIn actions immediately, but keep the browser open so the operator can clear the challenge manually. Do not close/reopen the browser, retry automatically, or probe additional LinkedIn pages while the challenge is visible. Keep waiting on the same browser session until the challenge is cleared.
 
 **Company website capture failure:** Run `npm run setup-project`, then retry `sync-company-websites`.
 

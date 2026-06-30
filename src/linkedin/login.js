@@ -27,22 +27,29 @@ export async function waitForLinkedInLogin(
   } = {}
 ) {
   const startedAt = Date.now();
+  let blockerNotice = null;
   await page.goto("https://www.linkedin.com/login", { waitUntil: "domcontentloaded" });
   log("Log in to LinkedIn in the opened browser. This command will wait until the session is ready.");
 
-  while (Date.now() - startedAt < timeoutMs) {
+  while (true) {
     const pageText = (await page.textContent("body").catch(() => "")) ?? "";
     const blocker = detectLinkedInBlockers(pageText);
     if (blocker.blocked && blocker.kind !== "linkedin_login_expired") {
-      return { status: "blocked", blocker: blocker.kind };
+      if (blockerNotice !== blocker.kind) {
+        log(`LinkedIn shows ${blocker.kind}. Clear it manually in the open browser; this command will keep waiting.`);
+        blockerNotice = blocker.kind;
+      }
+      await delay(pollIntervalMs);
+      continue;
     }
     if (!blocker.blocked) {
       return { status: "session_ready" };
     }
+    if (Date.now() - startedAt >= timeoutMs) {
+      return { status: "login_required" };
+    }
     await delay(pollIntervalMs);
   }
-
-  return { status: "login_required" };
 }
 
 function delay(ms) {
