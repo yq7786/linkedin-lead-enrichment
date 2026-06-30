@@ -328,6 +328,43 @@ test("syncLinkedInConnections keeps scanning while LinkedIn reveals more cards e
   assert.equal(writes[0].length, 10);
 });
 
+test("syncLinkedInConnections does not report exhaustion while the page keeps growing even if cards are already known", async () => {
+  const knownUrls = new Set(
+    Array.from({ length: 100 }, (_, index) => `https://www.linkedin.com/in/known-${index + 1}`)
+  );
+
+  const result = await syncLinkedInConnections({
+    limit: 10,
+    extractConnections: async ({ scrollPasses }) => {
+      const visible = scrollPasses >= 9 ? 55 : scrollPasses >= 6 ? 40 : 20;
+      return normalizeConnectionCards(
+        Array.from({ length: visible }, (_, index) => ({
+          profileHref: `https://www.linkedin.com/in/known-${index + 1}/`,
+          text: `Known ${index + 1}\nFounder at Old Co`
+        }))
+      );
+    },
+    inventoryRepository: {
+      listEligibleForEnrichment: async () => [],
+      findByProfileUrls: async (profileUrls) =>
+        profileUrls
+          .filter((url) => knownUrls.has(url))
+          .map((url) => ({
+            id: `known-${url}`,
+            linkedinProfileUrl: url,
+            workflowStatus: "submitted",
+            dedupeStatus: "dedupe_pending"
+          })),
+      upsertMany: async () => ({ upserted: 0 })
+    }
+  });
+
+  assert.equal(result.summary.batchSize, 0);
+  assert.equal(result.summary.discovered, 0);
+  assert.equal(result.summary.exhausted, false);
+  assert.equal(result.summary.scanAttempts, 3);
+});
+
 test("syncLinkedInConnections reports exhaustion only after LinkedIn stops yielding additional cards", async () => {
   const result = await syncLinkedInConnections({
     limit: 8,

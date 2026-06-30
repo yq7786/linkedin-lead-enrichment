@@ -194,8 +194,10 @@ async function discoverTopUpConnections({
     { scanLimit: remaining * 6, scrollPasses: 9 }
   ];
   let discovered = [];
-  let lastExtractedCount = 0;
+  let peakExtractedCount = 0;
+  let noGrowthAttempts = 0;
   let scanAttempts = 0;
+  const hardScanLimit = attempts.at(-1).scanLimit;
 
   for (const attempt of attempts) {
     scanAttempts += 1;
@@ -207,7 +209,13 @@ async function discoverTopUpConnections({
       ...connection,
       account: account ?? connection.account ?? null
     }));
-    lastExtractedCount = Math.max(lastExtractedCount, extracted.length);
+    const extractedCount = extracted.length;
+    if (extractedCount > peakExtractedCount) {
+      peakExtractedCount = extractedCount;
+      noGrowthAttempts = 0;
+    } else {
+      noGrowthAttempts += 1;
+    }
 
     const extractedUrls = extracted.map((connection) => connection.linkedinProfileUrl).filter(Boolean);
     const knownRows = inventoryRepository.findByProfileUrls
@@ -231,9 +239,12 @@ async function discoverTopUpConnections({
     }
   }
 
+  const hardCapReached = peakExtractedCount >= hardScanLimit;
+  const pageStoppedGrowing = noGrowthAttempts >= 1;
+
   return {
     discovered,
-    exhausted: discovered.length < remaining && lastExtractedCount < attempts.at(-1).scanLimit,
+    exhausted: discovered.length < remaining && pageStoppedGrowing && !hardCapReached,
     scanAttempts
   };
 }
