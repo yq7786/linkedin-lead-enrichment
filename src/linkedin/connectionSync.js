@@ -56,12 +56,10 @@ async function readConnectionCardsFromPage(page, scanLimit) {
         anchor.closest('[data-view-name*="connection"]') ||
         anchor.closest(".mn-connection-card") ||
         anchor.parentElement;
-      const companyAnchor = card?.querySelector('a[href*="/company/"]');
 
       cards.push({
         profileHref: href,
-        text: card?.innerText || anchor.innerText || "",
-        companyHref: companyAnchor?.href || companyAnchor?.getAttribute("href") || null
+        text: card?.innerText || anchor.innerText || ""
       });
 
       if (maxAnchors && cards.length >= maxAnchors) break;
@@ -87,8 +85,8 @@ export function normalizeConnectionCards(rawCards) {
       linkedinProfileUrl,
       fullName: lines[0] ?? null,
       headline: lines[1] ?? null,
-      currentCompanyName: rawCard.currentCompanyName ?? extractCompanyName(lines[1]),
-      currentCompanyUrl: normalizeLinkedInProfileUrl(rawCard.companyHref)
+      currentCompanyName: null,
+      currentCompanyUrl: null
     };
     const record = toInventoryRecord(connection);
     const existing = byProfileUrl.get(record.linkedinProfileUrl);
@@ -383,11 +381,6 @@ async function autoScroll(page, passes) {
 
     await page.waitForTimeout?.(800);
   }
-}
-
-function extractCompanyName(headline) {
-  const match = String(headline ?? "").match(/\bat\s+(.+)$/i);
-  return match?.[1]?.trim() ?? null;
 }
 
 function mergeConnectionRecord(existing, incoming) {

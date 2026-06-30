@@ -30,6 +30,7 @@ export function normalizeCompanyProfileCapture(capture) {
     source: "linkedin_company_profile",
     sourceUrl: normalizeCompanyUrl(capture.sourceUrl),
     facts: {
+      name: extractCompanyName(capture.html) ?? firstNonLabelLine(capture.text),
       overview: extractOverview(capture.text),
       website: normalizeExternalUrl(findWebsiteUrl(capture.links) ?? fieldAfterLabel(capture.text, "Website")),
       phone: fieldAfterLabel(capture.text, "Phone"),
@@ -92,6 +93,7 @@ export async function syncCompanyProfiles({
           },
           status: "company_captured"
         });
+        await repository.saveCompanyFacts?.(candidate, company);
         await repository.markCompanyCaptured?.(candidate.inventoryId);
       }
     } catch (error) {
@@ -151,9 +153,9 @@ export class CompanyProfileRepository {
   async saveCompanyFacts(item, company) {
     await this.client.query(
       `update linkedin_connection_inventory
-       set current_company_name = coalesce(current_company_name, $1)
+       set current_company_name = coalesce($1, current_company_name)
        where id = $2`,
-      [item.currentCompanyName ?? null, item.inventoryId]
+      [company.facts?.name ?? null, item.inventoryId]
     );
   }
 
@@ -172,6 +174,19 @@ function fieldAfterLabel(text, label) {
   const lines = cleanLines(text);
   const index = lines.findIndex((line) => line.toLowerCase() === label.toLowerCase());
   return index === -1 ? null : lines[index + 1] ?? null;
+}
+
+function extractCompanyName(html) {
+  const h1Match = String(html ?? "").match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+  if (!h1Match) return null;
+
+  const titleMatch = h1Match[0].match(/\stitle=(["'])(.*?)\1/i);
+  return cleanHtmlText(titleMatch?.[2] ?? h1Match[1]) || null;
+}
+
+function firstNonLabelLine(text) {
+  const labels = new Set(["overview", "website", "phone", "industry", "company size", "headquarters", "founded", "specialties"]);
+  return cleanLines(text).find((line) => !labels.has(line.toLowerCase())) ?? null;
 }
 
 function extractOverview(text) {
@@ -194,6 +209,15 @@ function splitSpecialties(value) {
 
 function cleanLines(text) {
   return String(text ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+function cleanHtmlText(value) {
+  return String(value ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function normalizeProfileUrlFilter(profileUrls) {

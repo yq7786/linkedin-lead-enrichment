@@ -169,6 +169,7 @@ async function main() {
   if (command === "refresh-profiles") {
     const limit = readNumberFlag(args, "--limit");
     const dryRun = args.includes("--dry-run");
+    const profileUrls = readStringFlags(args, "--profile-url");
     const config = validateConfig(process.env, { dryRun: true });
     const client = await connectedDbClient(config.databaseUrl);
     const browser = createLazyLinkedInBrowser(config);
@@ -184,6 +185,7 @@ async function main() {
           return createPlaywrightProfileExtractor(page, { log: console.error })(item);
         },
         limit: limit ?? config.defaultBatchLimit,
+        profileUrls,
         dryRun
       });
       console.log(JSON.stringify(result, null, 2));
@@ -317,6 +319,7 @@ async function main() {
   if (command === "sync-company-profiles") {
     const dryRun = args.includes("--dry-run");
     const limit = readNumberFlag(args, "--limit");
+    const profileUrls = readStringFlags(args, "--profile-url");
     const config = validateConfig(process.env, { dryRun: true });
     const browser = createLazyLinkedInBrowser(config);
     const client = await connectedDbClient(config.databaseUrl);
@@ -333,6 +336,7 @@ async function main() {
           return extractCompanyProfileFromPage(page, { companyUrl: item.currentCompanyUrl, log: console.error });
         },
         limit: limit ?? config.defaultBatchLimit,
+        profileUrls,
         dryRun
       });
       console.log(JSON.stringify(result, null, 2));
@@ -362,9 +366,9 @@ Commands:
   sync-connections [--limit N] [--dry-run]
   dedupe-inventory [--limit N] [--dry-run]
   process-queue [--limit N] [--dry-run]
-  refresh-profiles [--limit N] [--dry-run]
+  refresh-profiles [--limit N] [--dry-run] [--profile-url URL]
   sync-activities [--limit N] [--dry-run]
-  sync-company-profiles [--limit N] [--dry-run]
+  sync-company-profiles [--limit N] [--dry-run] [--profile-url URL]
   score-fits [--limit N] [--dry-run] [--rescore]
   sync-company-websites [--limit N] [--dry-run] [--resync]
   submit-qualified [--limit N] [--dry-run]
@@ -417,6 +421,19 @@ function readStringFlag(values, flag) {
     throw new Error(`${flag} must be followed by a value`);
   }
   return value;
+}
+
+function readStringFlags(values, flag) {
+  const results = [];
+  for (let index = 0; index < values.length; index += 1) {
+    if (values[index] !== flag) continue;
+    const value = values[index + 1];
+    if (!value || value.startsWith("--")) {
+      throw new Error(`${flag} must be followed by a value`);
+    }
+    results.push(value);
+  }
+  return results;
 }
 
 function readNumberFlag(values, flag) {

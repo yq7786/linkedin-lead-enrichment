@@ -83,10 +83,7 @@ export function htmlToWebsiteMarkdown(html) {
 }
 
 export async function captureCompanyWebsiteWithPlaywright(page, url, options = {}) {
-  await page.goto(url, {
-    waitUntil: options.waitUntil ?? "domcontentloaded",
-    timeout: options.timeout ?? 30_000
-  });
+  await gotoWithRetries(page, url, options);
   await waitForWebsiteBodyContent(page, options);
   const pageName = await page.title().catch(() => "Home");
   const html = await page.evaluate((selectors) => {
@@ -108,6 +105,26 @@ export async function captureCompanyWebsiteWithPlaywright(page, url, options = {
       contentMarkdown
     }]
   });
+}
+
+async function gotoWithRetries(page, url, options = {}) {
+  const baseTimeout = options.timeout ?? 30_000;
+  const retryCount = options.retries ?? 3;
+  let lastError;
+
+  for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+    try {
+      await page.goto(url, {
+        waitUntil: options.waitUntil ?? "domcontentloaded",
+        timeout: baseTimeout * (attempt + 1)
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
 }
 
 async function waitForWebsiteBodyContent(page, options = {}) {

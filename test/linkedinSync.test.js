@@ -26,8 +26,8 @@ test("normalizeConnectionCards dedupes and maps raw LinkedIn card data to invent
       linkedinProfileUrl: "https://www.linkedin.com/in/jane-smith",
       fullName: "Jane Smith",
       headline: "Founder at Acme AI",
-      currentCompanyName: "Acme AI",
-      currentCompanyUrl: "https://www.linkedin.com/company/acme-ai",
+      currentCompanyName: null,
+      currentCompanyUrl: null,
       account: null,
       dedupeStatus: "dedupe_pending",
       workflowStatus: "discovered"

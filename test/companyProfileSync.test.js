@@ -11,6 +11,7 @@ import {
 test("normalizeCompanyProfileCapture extracts LinkedIn about facts without markdown", () => {
   const company = normalizeCompanyProfileCapture({
     sourceUrl: "https://www.linkedin.com/company/acme-ai/about/",
+    html: "<main><h1 title=\"Acme AI\">Acme AI</h1></main>",
     text: [
       "Acme AI",
       "Overview",
@@ -35,6 +36,7 @@ test("normalizeCompanyProfileCapture extracts LinkedIn about facts without markd
 
   assert.equal(company.source, "linkedin_company_profile");
   assert.equal(company.sourceUrl, "https://www.linkedin.com/company/acme-ai");
+  assert.equal(company.facts.name, "Acme AI");
   assert.equal(company.facts.website, "https://acme.ai");
   assert.equal(company.facts.phone, "+61 2 1234 5678");
   assert.equal(company.facts.industry, "Software Development");
@@ -114,6 +116,7 @@ test("syncCompanyProfiles updates candidate file and inventory workflow status",
       listCompanyCandidates: async () => [
         { inventoryId: "inventory_1", currentCompanyUrl: "https://www.linkedin.com/company/acme-ai" }
       ],
+      saveCompanyFacts: async (item, company) => writes.push(["company_facts", item.inventoryId, company.facts.name]),
       markCompanyCaptured: async (inventoryId) => writes.push(["status", inventoryId])
     },
     candidateRepository: {
@@ -123,6 +126,7 @@ test("syncCompanyProfiles updates candidate file and inventory workflow status",
       source: "linkedin_company_profile",
       sourceUrl: "https://www.linkedin.com/company/acme-ai",
       facts: {
+        name: "Acme AI Pty Ltd",
         overview: "Acme AI builds workflow automation software.",
         website: "https://acme.ai",
         phone: null,
@@ -138,8 +142,27 @@ test("syncCompanyProfiles updates candidate file and inventory workflow status",
   assert.equal(result.summary.companiesProcessed, 1);
   assert.deepEqual(writes, [
     ["candidate", "inventory_1", "https://acme.ai", "company_captured"],
+    ["company_facts", "inventory_1", "Acme AI Pty Ltd"],
     ["status", "inventory_1"]
   ]);
+});
+
+test("CompanyProfileRepository saves company profile h1 name back to inventory", async () => {
+  const queries = [];
+  const repository = new CompanyProfileRepository({
+    async query(sql, params) {
+      queries.push({ sql, params });
+      return { rows: [], rowCount: 1 };
+    }
+  });
+
+  await repository.saveCompanyFacts(
+    { inventoryId: "inventory_1", currentCompanyName: "Old Name" },
+    { facts: { name: "SimplifyQA Sdn Bhd" } }
+  );
+
+  assert.match(queries[0].sql, /current_company_name = coalesce\(\$1, current_company_name\)/i);
+  assert.deepEqual(queries[0].params, ["SimplifyQA Sdn Bhd", "inventory_1"]);
 });
 
 test("CompanyProfileRepository lists company candidates without reading or writing snapshots", async () => {

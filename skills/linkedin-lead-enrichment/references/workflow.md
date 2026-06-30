@@ -17,7 +17,7 @@ Use `npm run guided-workflow` for live operator runs. Pass `--account` and `--li
 
 Use `npm run guided-workflow -- --skip-finalization` only for skill optimization, local testing, or dry rehearsals that must stop before portal submission. This mode still runs the browser-backed workflow sequentially with one persistent browser context, then stops after `sync-company-websites` and skips `submit-qualified` plus the final status summary.
 
-`dedupe-inventory` runs after `sync-company-profiles` because CRM matching requires a reliable `current_company_name`, which profile sync alone may not provide.
+`dedupe-inventory` runs after `process-queue` and `sync-company-profiles` because CRM matching requires a reliable `current_company_name`. `process-queue` derives it from the LinkedIn Experience details page, then `sync-company-profiles` can correct it from the company page `h1`.
 
 ## Step summary
 
@@ -29,8 +29,8 @@ Use `npm run guided-workflow -- --skip-finalization` only for skill optimization
 | `dedupe-inventory` | `company_captured` + `dedupe_pending` | Inventory CRM link or `dedupe_cleared_for_enrichment` |
 | `sync-activities` | `company_captured` + `not_found` | Candidate file + `activity_captured` |
 | `score-fits` | Candidate files (`profile_captured`, `company_captured`, `activity_captured`) | Candidate file + `qualified` / `skipped_not_fit` |
-| `sync-company-websites` | `qualified` candidates only | Candidate file + `website_captured` |
-| `submit-qualified` | `website_captured` candidates | Portal webhook + `submitted` |
+| `sync-company-websites` | `qualified` candidates only | Candidate file + `website_captured` when capture succeeds |
+| `submit-qualified` | `qualified` + `website_captured` candidates | Portal webhook + `submitted` |
 | Final status summary | Selected batch profile URLs | Counts grouped by `linkedin_connection_inventory.workflow_status` |
 
 ## Dedupe outcomes

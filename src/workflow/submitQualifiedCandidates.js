@@ -9,7 +9,10 @@ export async function submitQualifiedCandidates({
   dryRun = false,
   now = new Date()
 }) {
-  const candidates = await candidateRepository.listByStatus("website_captured", { inventoryIds });
+  const candidates = [];
+  for (const status of ["qualified", "website_captured"]) {
+    candidates.push(...await candidateRepository.listByStatus(status, { inventoryIds }));
+  }
   const selected = typeof limit === "number" ? candidates.slice(0, limit) : candidates;
   const summary = { submitted: 0, wouldSubmit: 0, skipped: 0, failed: 0 };
   const items = [];
@@ -63,7 +66,7 @@ export async function submitQualifiedCandidates({
             error: error.message
           }
         },
-        status: "website_captured"
+        status: candidate.candidate?.status ?? "qualified"
       });
       await repository.markSubmissionFailed?.(inventoryId, error);
     }

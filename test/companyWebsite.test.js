@@ -122,6 +122,50 @@ test("captureCompanyWebsiteWithPlaywright waits for JS-rendered body content", a
   assert.match(capture.pages[0].contentMarkdown, /AI workflow automation/);
 });
 
+test("captureCompanyWebsiteWithPlaywright retries navigation with escalating timeouts", async () => {
+  const gotoTimeouts = [];
+  const page = {
+    async goto(_url, options) {
+      gotoTimeouts.push(options.timeout);
+      if (gotoTimeouts.length < 4) {
+        throw new Error(`Navigation timeout ${options.timeout}`);
+      }
+    },
+    async title() {
+      return "Acme AI";
+    },
+    url() {
+      return "https://acme.ai/";
+    },
+    async waitForFunction() {},
+    async evaluate(fn, selectors) {
+      const previousDocument = globalThis.document;
+      globalThis.document = {
+        body: {
+          cloneNode() {
+            return {
+              querySelectorAll() {
+                return [];
+              },
+              innerHTML: "<main><h1>Acme AI</h1><p>AI workflow automation for startups.</p></main>"
+            };
+          }
+        }
+      };
+      try {
+        return fn(selectors);
+      } finally {
+        globalThis.document = previousDocument;
+      }
+    }
+  };
+
+  const capture = await captureCompanyWebsiteWithPlaywright(page, "https://acme.ai");
+
+  assert.deepEqual(gotoTimeouts, [30_000, 60_000, 90_000, 120_000]);
+  assert.equal(capture.pages.length, 1);
+});
+
 test("syncCompanyWebsites updates candidate companyWebsite and inventory workflow status", async () => {
   const writes = [];
   const result = await syncCompanyWebsites({

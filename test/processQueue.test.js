@@ -251,6 +251,24 @@ test("ProcessQueueRepository refresh selector includes qualified inventory", asy
   assert.deepEqual(queries[0].params, [3]);
 });
 
+test("ProcessQueueRepository refresh selector can target profile URLs", async () => {
+  const queries = [];
+  const repository = new ProcessQueueRepository({
+    async query(sql, params) {
+      queries.push({ sql, params });
+      return { rows: [], rowCount: 0 };
+    }
+  });
+
+  await repository.listProfilesForRefresh({
+    limit: 3,
+    profileUrls: ["https://www.linkedin.com/in/jameslharman"]
+  });
+
+  assert.match(queries[0].sql, /lower\(linkedin_profile_url\) = any/);
+  assert.deepEqual(queries[0].params, [["https://www.linkedin.com/in/jameslharman"], 3]);
+});
+
 test("ProcessQueueRepository backfills inventory company fields from profile facts", async () => {
   const queries = [];
   const repository = new ProcessQueueRepository({
@@ -636,6 +654,89 @@ test("createPlaywrightProfileExtractor falls back to dedicated experience page w
       description: "Built a responsive wealth management dashboard."
     }
   ]);
+});
+
+test("createPlaywrightProfileExtractor prefers dedicated experience page job history", async () => {
+  const calls = [];
+  const page = {
+    async goto(url) {
+      calls.push(["goto", url]);
+    },
+    async waitForLoadState() {},
+    async evaluate() {
+      if (calls.at(-1)?.[1]?.endsWith("/details/experience/")) {
+        return {
+          sections: [
+            {
+              text: [
+                "Experience",
+                "",
+                "Current Co",
+                "",
+                "Full-time · 1 yr",
+                "",
+                "Founder",
+                "",
+                "Jan 2025 - Present · 1 yr",
+                "",
+                "Building the current company."
+              ].join("\n"),
+              html: "<section><h1>Experience</h1><a href=\"https://www.linkedin.com/company/current-co/\">Current Co</a></section>"
+            }
+          ],
+          rawHtml: "<main></main>"
+        };
+      }
+
+      return {
+        sections: [
+          {
+            text: [
+              "Jane Smith",
+              "",
+              "Founder at Current Co",
+              "",
+              "Sydney, New South Wales, Australia"
+            ].join("\n"),
+            html: "<section><h1>Jane Smith</h1></section>"
+          },
+          {
+            text: [
+              "Experience",
+              "",
+              "Advisor",
+              "",
+              "Old Co · Full-time",
+              "",
+              "Jan 2020 - Dec 2021 · 2 yrs"
+            ].join("\n"),
+            html: "<section><h2>Experience</h2><a href=\"https://www.linkedin.com/company/old-co/\">Old Co</a></section>"
+          }
+        ],
+        rawHtml: "<main></main>"
+      };
+    }
+  };
+
+  const capture = await createPlaywrightProfileExtractor(page)({
+    linkedinProfileUrl: "https://www.linkedin.com/in/jane-smith",
+    fullName: "Jane Smith"
+  });
+
+  assert.deepEqual(calls.map((call) => call[1]), [
+    "https://www.linkedin.com/in/jane-smith",
+    "https://www.linkedin.com/in/jane-smith/details/experience/"
+  ]);
+  assert.equal(capture.facts.currentCompanyName, "Current Co");
+  assert.equal(capture.facts.currentCompanyLinkedInUrl, "https://www.linkedin.com/company/current-co");
+  assert.equal(capture.facts.currentRoleTitle, "Founder");
+  assert.deepEqual(capture.facts.jobHistory[0], {
+    title: "Founder",
+    companyName: "Current Co",
+    startDate: "Jan 2025",
+    endDate: null,
+    description: "Building the current company."
+  });
 });
 
 test("createPlaywrightProfileExtractor parses company duration groups with role employment lines", async () => {

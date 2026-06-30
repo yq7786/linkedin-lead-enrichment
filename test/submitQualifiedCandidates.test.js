@@ -30,47 +30,58 @@ test("PortalCandidateAdapter posts candidate payload to portal", async () => {
 
 test("submitQualifiedCandidates submits only qualified unsubmitted candidates", async () => {
   const writes = [];
+  const statusesListed = [];
   const result = await submitQualifiedCandidates({
     candidateRepository: {
-      listByStatus: async () => [
-        {
-          candidate: { inventoryId: "inventory_1", status: "website_captured" },
-          identity: { firstName: "Jane", lastName: "Smith" },
-          fit: { founderSignal: true, startupSignal: true, recentActivitySignal: true },
-          portalSubmission: { status: "not_submitted" }
-        }
-      ],
+      listByStatus: async (status) => {
+        statusesListed.push(status);
+        return status === "website_captured"
+          ? [{
+              candidate: { inventoryId: "inventory_1", status: "website_captured" },
+              identity: { firstName: "Jane", lastName: "Smith" },
+              fit: { founderSignal: true, startupSignal: true, recentActivitySignal: true },
+              portalSubmission: { status: "not_submitted" }
+            }]
+          : [{
+              candidate: { inventoryId: "inventory_2", status: "qualified" },
+              identity: { firstName: "Michelle", lastName: "Chua-Lagare" },
+              fit: { founderSignal: true, startupSignal: true, recentActivitySignal: true },
+              portalSubmission: { status: "not_submitted" }
+            }];
+      },
       upsertCandidate: async (input) => writes.push(["candidate", input.inventoryId, input.patch.portalSubmission.portalCandidateId, input.status])
     },
     portalCandidates: {
-      submitCandidate: async () => ({ portalCandidateId: "portal_123" })
+      submitCandidate: async (payload) => ({ portalCandidateId: `portal_${payload.inventoryId}` })
     },
     repository: {
       markSubmitted: async (inventoryId, portalCandidateId) => writes.push(["db", inventoryId, portalCandidateId])
     }
   });
 
-  assert.deepEqual(result.summary, { submitted: 1, wouldSubmit: 0, skipped: 0, failed: 0 });
+  assert.deepEqual(statusesListed, ["qualified", "website_captured"]);
+  assert.deepEqual(result.summary, { submitted: 2, wouldSubmit: 0, skipped: 0, failed: 0 });
   assert.deepEqual(writes, [
-    ["candidate", "inventory_1", "portal_123", "submitted"],
-    ["db", "inventory_1", "portal_123"]
+    ["candidate", "inventory_2", "portal_inventory_2", "submitted"],
+    ["db", "inventory_2", "portal_inventory_2"],
+    ["candidate", "inventory_1", "portal_inventory_1", "submitted"],
+    ["db", "inventory_1", "portal_inventory_1"]
   ]);
 });
 
 test("submitQualifiedCandidates dry-run builds portal payloads and reports malformed candidates", async () => {
   const result = await submitQualifiedCandidates({
     candidateRepository: {
-      listByStatus: async () => [
-        {
-          candidate: { inventoryId: "inventory_1", status: "website_captured" },
-          identity: { firstName: "Jane", lastName: "Smith" },
-          fit: { founderSignal: true, startupSignal: true, recentActivitySignal: true }
-        },
-        {
-          candidate: { inventoryId: "inventory_2", status: "qualified" },
-          fit: { founderSignal: true, startupSignal: true, recentActivitySignal: true }
-        }
-      ],
+      listByStatus: async (status) => status === "website_captured"
+        ? [{
+            candidate: { inventoryId: "inventory_1", status: "website_captured" },
+            identity: { firstName: "Jane", lastName: "Smith" },
+            fit: { founderSignal: true, startupSignal: true, recentActivitySignal: true }
+          }]
+        : [{
+            candidate: { inventoryId: "inventory_2", status: "qualified" },
+            fit: { founderSignal: true, startupSignal: true, recentActivitySignal: true }
+          }],
       upsertCandidate: async () => {
         throw new Error("dry-run must not write candidate files");
       }
@@ -89,24 +100,24 @@ test("submitQualifiedCandidates dry-run builds portal payloads and reports malfo
   });
 
   assert.deepEqual(result.summary, { submitted: 0, wouldSubmit: 1, skipped: 0, failed: 1 });
-  assert.equal(result.items[0].status, "would_submit");
-  assert.equal(result.items[0].payload.source, "linkedin_lead_enrichment");
-  assert.equal(result.items[0].payload.inventoryId, "inventory_1");
-  assert.equal(result.items[1].status, "failed");
-  assert.match(result.items[1].error, /identity/);
+  assert.equal(result.items[0].status, "failed");
+  assert.match(result.items[0].error, /identity/);
+  assert.equal(result.items[1].status, "would_submit");
+  assert.equal(result.items[1].payload.source, "linkedin_lead_enrichment");
+  assert.equal(result.items[1].payload.inventoryId, "inventory_1");
 });
 
 test("submitQualifiedCandidates records portal failures for audit", async () => {
   const writes = [];
   const result = await submitQualifiedCandidates({
     candidateRepository: {
-      listByStatus: async () => [
-        {
-          candidate: { inventoryId: "inventory_1", status: "website_captured" },
-          identity: { firstName: "Jane", lastName: "Smith" },
-          fit: { founderSignal: true, startupSignal: true, recentActivitySignal: true }
-        }
-      ],
+      listByStatus: async (status) => status === "website_captured"
+        ? [{
+            candidate: { inventoryId: "inventory_1", status: "website_captured" },
+            identity: { firstName: "Jane", lastName: "Smith" },
+            fit: { founderSignal: true, startupSignal: true, recentActivitySignal: true }
+          }]
+        : [],
       upsertCandidate: async (input) => writes.push(["candidate", input.inventoryId, input.patch.portalSubmission.status, input.status])
     },
     portalCandidates: {

@@ -22,8 +22,8 @@ Enrichment evidence lives in `.lead-enrichment-candidates/*.md`, not in Neon.
 
 | Column | When |
 | --- | --- |
-| `linkedin_profile_url` | Connection sync |
-| `full_name`, `headline`, `current_company_name`, `current_company_url` | Connection sync |
+| `linkedin_profile_url`, `full_name`, `headline` | Connection sync |
+| `current_company_name`, `current_company_url` | `process-queue` from the LinkedIn profile Experience details page; `sync-company-profiles` can update `current_company_name` from the company page `h1` |
 | `account` | Guided workflow connection sync; selected LinkedIn account such as `Kirk`, `Kathryn`, `Ice`, `Terri`, `Sarah`, `Siriluk`, or custom |
 | `last_seen_at` | Connection sync |
 | `dedupe_status`, `dedupe_match_method` | Dedupe step |
@@ -43,7 +43,7 @@ Do not create portal CRM records locally outside these paths.
 
 **`dedupe_status`:** `dedupe_pending` → `matched_existing` | `not_found` (continue enrichment) | `needs_review`
 
-**`workflow_status`:** `discovered` → `linkedin_extracted` → `company_captured` → (`deduped_existing` | continue) → `activity_captured` → `qualified` → `website_captured` → `submitted`
+**`workflow_status`:** `discovered` → `linkedin_extracted` → `company_captured` → (`deduped_existing` | continue) → `activity_captured` → `qualified` → (`website_captured` when website capture succeeds) → `submitted`. Portal submission can also advance directly from `qualified` to `submitted` when website capture is unavailable or fails.
 
 Use `inspect-status` to see all inventory counts by status. The guided workflow prints a final summary for only the profile URLs discovered in the current batch.
 

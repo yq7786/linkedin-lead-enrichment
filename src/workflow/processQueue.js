@@ -152,21 +152,19 @@ export function createPlaywrightProfileExtractor(page, options = {}) {
     );
     let experienceHtml = experienceSection?.html ?? "";
 
-    if (jobHistory.length === 0) {
-      const detailsCapture = await captureLinkedInExperienceDetails(page, sourceUrl, { log: options.log });
-      if (detailsCapture) {
-        const detailSections = normalizeProfileSections(normalizeProfileCapture(detailsCapture).sections);
-        experienceSection = findSectionByHeading(detailSections, "Experience") ?? detailSections[0] ?? null;
-        const detailsText = experienceSection?.text
-          ? stripSectionHeading(experienceSection.text, "Experience")
-          : sectionAfterHeading(extractProfileMainContent(detailSections).text, "Experience");
-        const detailsFacts = parseExperienceFacts(detailsText, null, headline);
-        if (detailsFacts.jobHistory.length > 0) {
-          currentRoleTitle = detailsFacts.currentRoleTitle;
-          currentRoleStartDate = detailsFacts.currentRoleStartDate;
-          jobHistory = detailsFacts.jobHistory;
-          experienceHtml = experienceSection?.html ?? "";
-        }
+    const detailsCapture = await captureLinkedInExperienceDetails(page, sourceUrl, { log: options.log });
+    if (detailsCapture) {
+      const detailSections = normalizeProfileSections(normalizeProfileCapture(detailsCapture).sections);
+      experienceSection = findSectionByHeading(detailSections, "Experience") ?? detailSections[0] ?? null;
+      const detailsText = experienceSection?.text
+        ? stripSectionHeading(experienceSection.text, "Experience")
+        : sectionAfterHeading(extractProfileMainContent(detailSections).text, "Experience");
+      const detailsFacts = parseExperienceFacts(detailsText, null, headline);
+      if (detailsFacts.jobHistory.length > 0) {
+        currentRoleTitle = detailsFacts.currentRoleTitle;
+        currentRoleStartDate = detailsFacts.currentRoleStartDate;
+        jobHistory = detailsFacts.jobHistory;
+        experienceHtml = experienceSection?.html ?? "";
       }
     }
 
@@ -374,10 +372,13 @@ export class ProcessQueueRepository {
     return result.rows.map(toCamelInventory);
   }
 
-  async listProfilesForRefresh({ limit } = {}) {
+  async listProfilesForRefresh({ limit, profileUrls } = {}) {
     const params = [];
-    const limitClause = limit ? "limit $1" : "";
-    if (limit) params.push(limit);
+    const normalizedProfileUrls = normalizeProfileUrlFilter(profileUrls);
+    const profileFilter = normalizedProfileUrls.length
+      ? `and lower(linkedin_profile_url) = any($${params.push(normalizedProfileUrls)}::text[])`
+      : "";
+    const limitClause = limit ? `limit $${params.push(limit)}` : "";
     const result = await this.client.query(
       `select
          id,
@@ -391,6 +392,7 @@ export class ProcessQueueRepository {
        from linkedin_connection_inventory
        where linkedin_profile_url is not null
          and workflow_status in ('linkedin_extracted', 'qualified', 'skipped_not_fit')
+         ${profileFilter}
        order by discovered_at asc
        ${limitClause}`,
       params
