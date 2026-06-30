@@ -5,8 +5,10 @@
   "type": "module",
   "description": "Local-first LinkedIn lead enrichment workflow scaffold.",
   "scripts": {
+    "setup-project": "npm install && npx playwright install chromium",
     "test": "node --test test/*.test.js",
     "check-config": "node src/cli.js check-config",
+    "migrate-db": "node src/cli.js migrate-db",
     "inspect-status": "node src/cli.js inspect-status",
     "login-linkedin": "node src/cli.js login-linkedin",
     "guided-workflow": "node src/cli.js guided-workflow",

@@ -41,8 +41,7 @@ Generated data and local runtime state are intentionally ignored: `.env`, `.link
 ```bash
 git clone https://github.com/yq7786/linkedin-lead-enrichment.git
 cd linkedin-lead-enrichment
-npm install
-npx playwright install chromium
+npm run setup-project
 cp .env.example .env
 ```
 
@@ -58,7 +57,7 @@ PORTAL_CALLBACK_SECRET=...
 Create the workflow tables in your database:
 
 ```bash
-psql "$DATABASE_URL" -f sql/001_workflow_tables.sql
+npm run migrate-db
 ```
 
 ## Local Skill Install Options
@@ -100,10 +99,12 @@ Live operator workflow (interactive prompts):
 npm run guided-workflow
 ```
 
+If LinkedIn is not logged in, the workflow opens the persistent Playwright browser profile and waits while you complete login before Step 1.
+
 After collecting inputs in chat and writing `.env` (agent or operator):
 
 ```bash
-npm run guided-workflow -- --account kathryn --limit 10
+npm run guided-workflow -- --account kathryb --limit 10
 ```
 
 Optimization/testing mode, which skips `submit-qualified` and the final status summary:

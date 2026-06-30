@@ -26,10 +26,9 @@ cd linkedin-lead-enrichment
 ```
 
 ```bash
-npm install
-npx playwright install chromium
+npm run setup-project
 cp .env.example .env
-psql "$DATABASE_URL" -f sql/001_workflow_tables.sql
+npm run migrate-db
 ```
 
 ## Run a batch
@@ -55,6 +54,8 @@ npm run guided-workflow
 ```
 
 The guided workflow runs all steps sequentially with **one persistent browser context** until every step completes or the run fails. Do not interleave separate browser-backed CLI commands during a guided run.
+
+If LinkedIn is not logged in, `guided-workflow` opens the persistent Playwright browser profile and waits for the user to complete login before `sync-connections`. Do not tell the user to run a separate login command unless they explicitly want to pre-login.
 
 ## Reference routing
 

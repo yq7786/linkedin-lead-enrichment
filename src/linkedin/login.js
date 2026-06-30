@@ -1,39 +1,50 @@
 import { createLinkedInBrowserSession, detectLinkedInBlockers } from "./browser.js";
 
+const DEFAULT_LOGIN_TIMEOUT_MS = 15 * 60 * 1000;
+const DEFAULT_LOGIN_POLL_INTERVAL_MS = 2000;
+
 export async function openLinkedInLoginSession({
   profilePath,
   playwright,
   createSession = (path) => createLinkedInBrowserSession({ profilePath: path, playwright }),
-  waitForOperator = waitForEnter
+  waitForLogin = waitForLinkedInLogin
 }) {
   const context = await createSession(profilePath);
   try {
     const page = context.pages()[0] ?? await context.newPage();
-    await page.goto("https://www.linkedin.com/login", { waitUntil: "domcontentloaded" });
-    await waitForOperator();
-
-    const pageText = (await page.textContent("body")) ?? "";
-    const blocker = detectLinkedInBlockers(pageText);
-    if (blocker.blocked && blocker.kind !== "linkedin_login_expired") {
-      return { status: "blocked", blocker: blocker.kind };
-    }
-    if (blocker.kind === "linkedin_login_expired") {
-      return { status: "login_required" };
-    }
-
-    return { status: "session_ready" };
+    return await waitForLogin(page);
   } finally {
     await context.close();
   }
 }
 
-function waitForEnter() {
-  console.log("Log in to LinkedIn in the opened browser, then press Enter here to continue.");
-  return new Promise((resolve) => {
-    process.stdin.resume();
-    process.stdin.once("data", () => {
-      process.stdin.pause();
-      resolve();
-    });
-  });
+export async function waitForLinkedInLogin(
+  page,
+  {
+    timeoutMs = DEFAULT_LOGIN_TIMEOUT_MS,
+    pollIntervalMs = DEFAULT_LOGIN_POLL_INTERVAL_MS,
+    log = console.log
+  } = {}
+) {
+  const startedAt = Date.now();
+  await page.goto("https://www.linkedin.com/login", { waitUntil: "domcontentloaded" });
+  log("Log in to LinkedIn in the opened browser. This command will wait until the session is ready.");
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const pageText = (await page.textContent("body").catch(() => "")) ?? "";
+    const blocker = detectLinkedInBlockers(pageText);
+    if (blocker.blocked && blocker.kind !== "linkedin_login_expired") {
+      return { status: "blocked", blocker: blocker.kind };
+    }
+    if (!blocker.blocked) {
+      return { status: "session_ready" };
+    }
+    await delay(pollIntervalMs);
+  }
+
+  return { status: "login_required" };
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

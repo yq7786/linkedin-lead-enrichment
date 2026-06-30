@@ -23,6 +23,7 @@ import {
   extractConnectionCardsFromPage,
   syncLinkedInConnections
 } from "./linkedin/connectionSync.js";
+import { waitForLinkedInLogin } from "./linkedin/login.js";
 import { CandidateFileRepository } from "./workflow/candidateFiles.js";
 import { dedupeInventory, DedupeInventoryRepository } from "./workflow/dedupeInventory.js";
 import {
@@ -40,7 +41,7 @@ import {
 } from "./workflow/submitQualifiedCandidates.js";
 import { CompanyWebsiteRepository, syncCompanyWebsites } from "./workflow/syncCompanyWebsites.js";
 
-export const LINKEDIN_ACCOUNT_CHOICES = ["kirk", "kathryn", "terri", "sarah", "ice", "siriluk"];
+export const LINKEDIN_ACCOUNT_CHOICES = ["kirk", "kathryb", "terri", "sarah", "ice", "siriluk"];
 
 export function resolveGuidedWorkflowAnswers({ env = process.env, account, limit } = {}) {
   loadDotenv(env);
@@ -139,6 +140,7 @@ export async function runGuidedWorkflow({
   const scoreProfiles = dependencies.scoreExtractedProfiles ?? scoreExtractedProfiles;
   const syncWebsites = dependencies.syncCompanyWebsites ?? syncCompanyWebsites;
   const submitCandidates = dependencies.submitQualifiedCandidates ?? submitQualifiedCandidates;
+  const waitForLogin = dependencies.waitForLinkedInLogin ?? waitForLinkedInLogin;
   let context;
   try {
     await ensureInventoryAccountColumn(client);
@@ -151,6 +153,8 @@ export async function runGuidedWorkflow({
     const candidateRepository = new CandidateFileRepository({
       directory: path.join(cwd, ".lead-enrichment-candidates")
     });
+
+    await ensureLinkedInSession(page, { waitForLogin, log });
 
     log("Step 1/8: sync-connections");
     const syncResult = await syncConnections({
@@ -266,6 +270,15 @@ export async function runGuidedWorkflow({
     await context?.close();
     await client.end();
   }
+}
+
+async function ensureLinkedInSession(page, { waitForLogin, log }) {
+  const result = await waitForLogin(page, { log });
+  if (result.status === "session_ready") return;
+  if (result.status === "blocked") {
+    throw new Error(`LinkedIn browser blocked: ${result.blocker}`);
+  }
+  throw new Error("LinkedIn login was not completed before the timeout. Rerun the workflow when ready.");
 }
 
 export async function writeLocalEnvFile(envPath, values) {

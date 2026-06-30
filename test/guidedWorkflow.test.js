@@ -118,7 +118,7 @@ test("askGuidedWorkflowQuestions accepts env values at once before account and l
       }
       if (text.includes("LinkedIn Account") && !answered.has("account")) {
         answered.add("account");
-        inputStream.write("kathryn\n");
+        inputStream.write("kathryb\n");
       }
       if (text.includes("Number of connections") && !answered.has("limit")) {
         answered.add("limit");
@@ -135,7 +135,7 @@ test("askGuidedWorkflowQuestions accepts env values at once before account and l
     openaiApiKey: "sk-test",
     portalQualifiedIngestUrl: "https://portal.example/ingest",
     portalCallbackSecret: "secret",
-    linkedinAccount: "kathryn",
+    linkedinAccount: "kathryb",
     connectionLimit: 3
   });
   assert.match(output.join(""), /High connection counts can hit LinkedIn usage limits or paid API limits/);
@@ -225,6 +225,10 @@ test("runGuidedWorkflow skipFinalization stops before submit-qualified and final
     },
     async submitQualifiedCandidates() {
       throw new Error("submit-qualified should be skipped");
+    },
+    async waitForLinkedInLogin() {
+      calls.push("wait-for-login");
+      return { status: "session_ready" };
     }
   };
   const logs = [];
@@ -235,7 +239,7 @@ test("runGuidedWorkflow skipFinalization stops before submit-qualified and final
       openaiApiKey: "sk-test",
       portalQualifiedIngestUrl: "https://portal.example/ingest",
       portalCallbackSecret: "secret",
-      linkedinAccount: "kathryn",
+      linkedinAccount: "kathryb",
       connectionLimit: 1
     },
     cwd: directory,
@@ -246,6 +250,7 @@ test("runGuidedWorkflow skipFinalization stops before submit-qualified and final
   });
 
   assert.deepEqual(calls, [
+    "wait-for-login",
     "sync-connections",
     "process-queue",
     "sync-company-profiles",
