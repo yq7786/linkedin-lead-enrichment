@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Local-first LinkedIn lead enrichment workflow scaffold.",
   "scripts": {
-    "setup-project": "npm install && npx playwright install chromium",
+    "setup-project": "npm ci && npx playwright install chromium",
     "test": "node --test test/*.test.js",
     "check-config": "node src/cli.js check-config",
     "inspect-status": "node src/cli.js inspect-status",

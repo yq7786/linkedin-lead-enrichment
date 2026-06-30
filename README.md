@@ -12,6 +12,15 @@ Fastest path from another Codex session:
 Use $skill-installer to install https://github.com/yq7786/linkedin-lead-enrichment/tree/main/skills/linkedin-lead-enrichment
 ```
 
+If the default installer hits local Python SSL/certificate issues, use the git-backed installer path:
+
+```bash
+python3 /Users/haydnqi/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
+  --repo yq7786/linkedin-lead-enrichment \
+  --path skills/linkedin-lead-enrichment \
+  --method git
+```
+
 Restart Codex after installation, then ask:
 
 ```text
