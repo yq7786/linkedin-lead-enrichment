@@ -8,10 +8,35 @@ export async function extractConnectionCardsFromPage(page, options = {}) {
   await page.goto(options.url ?? CONNECTIONS_URL, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState?.("networkidle", { timeout: options.networkIdleTimeoutMs ?? 10000 }).catch(() => {});
   await waitForLinkedInBlockersToClear(page, { log: options.log });
-  await autoScroll(page, options.scrollPasses ?? 3);
-  await waitForLinkedInBlockersToClear(page, { log: options.log });
+  const resultLimit = options.scanLimit ?? options.limit;
+  const requestedLimit = options.limit ?? resultLimit;
+  const maxScrollPasses = options.maxScrollPasses ?? Math.max(options.scrollPasses ?? 3, requestedLimit ? Math.ceil(requestedLimit / 4) + 3 : 8);
+  const stableScrollPasses = options.stableScrollPasses ?? 2;
+  let rawCards = [];
+  let normalized = [];
+  let stablePasses = 0;
 
-  const rawCards = await page.evaluate((scanLimit) => {
+  for (let pass = 0; pass <= maxScrollPasses; pass += 1) {
+    rawCards = await readConnectionCardsFromPage(page, resultLimit);
+    const nextNormalized = normalizeConnectionCards(rawCards);
+    if (nextNormalized.length > normalized.length) {
+      normalized = nextNormalized;
+      stablePasses = 0;
+    } else {
+      stablePasses += 1;
+    }
+
+    if (requestedLimit && normalized.length >= requestedLimit) break;
+    if (pass >= (options.scrollPasses ?? 3) && stablePasses >= stableScrollPasses) break;
+    await autoScroll(page, 1);
+    await waitForLinkedInBlockersToClear(page, { log: options.log });
+  }
+
+  return resultLimit ? normalized.slice(0, resultLimit) : normalized;
+}
+
+async function readConnectionCardsFromPage(page, scanLimit) {
+  return page.evaluate((scanLimit) => {
     const anchors = [...document.querySelectorAll('a[href*="/in/"]')];
     const cards = [];
     const maxAnchors = scanLimit ? scanLimit * 4 : null;
@@ -37,11 +62,7 @@ export async function extractConnectionCardsFromPage(page, options = {}) {
     }
 
     return cards;
-  }, options.scanLimit ?? options.limit ?? null);
-
-  const normalized = normalizeConnectionCards(rawCards);
-  const resultLimit = options.scanLimit ?? options.limit;
-  return resultLimit ? normalized.slice(0, resultLimit) : normalized;
+  }, scanLimit ?? null);
 }
 
 export function normalizeConnectionCards(rawCards) {
@@ -112,21 +133,17 @@ async function syncUsefulConnectionBatch({
   const remaining = Math.max(0, limit - existingConnections.length);
   let discovered = [];
   let upserted = 0;
+  let exhausted = remaining > 0;
 
   if (remaining > 0) {
-    const extracted = (await extractConnections({ limit: remaining, scanLimit: remaining * 4 })).map((connection) => ({
-      ...connection,
-      account: account ?? connection.account ?? null
-    }));
-    const extractedUrls = extracted.map((connection) => connection.linkedinProfileUrl).filter(Boolean);
-    const knownRows = inventoryRepository.findByProfileUrls
-      ? await inventoryRepository.findByProfileUrls(extractedUrls)
-      : [];
-    const knownUrls = new Set(knownRows.map((row) => row.linkedinProfileUrl));
-
-    discovered = extracted
-      .filter((connection) => connection.linkedinProfileUrl && !knownUrls.has(connection.linkedinProfileUrl))
-      .slice(0, remaining);
+    const discoveryResult = await discoverTopUpConnections({
+      extractConnections,
+      inventoryRepository,
+      account,
+      remaining
+    });
+    discovered = discoveryResult.discovered;
+    exhausted = discoveryResult.exhausted;
 
     if (!dryRun && discovered.length > 0) {
       const result = await inventoryRepository.upsertMany(discovered);
@@ -150,12 +167,67 @@ async function syncUsefulConnectionBatch({
     profileUrls,
     inventoryIds,
     summary: {
+      requested: limit,
       batchSize: connections.length,
       existingSelected: existingConnections.length,
       discovered: discovered.length,
-      upserted
+      upserted,
+      exhausted
     },
     upserted
+  };
+}
+
+async function discoverTopUpConnections({
+  extractConnections,
+  inventoryRepository,
+  account,
+  remaining
+}) {
+  const attempts = [
+    { scanLimit: remaining * 4, scrollPasses: 3 },
+    { scanLimit: remaining * 4, scrollPasses: 6 },
+    { scanLimit: remaining * 6, scrollPasses: 9 }
+  ];
+  let discovered = [];
+  let lastExtractedCount = 0;
+
+  for (const attempt of attempts) {
+    const extracted = (await extractConnections({
+      limit: remaining,
+      scanLimit: attempt.scanLimit,
+      scrollPasses: attempt.scrollPasses
+    })).map((connection) => ({
+      ...connection,
+      account: account ?? connection.account ?? null
+    }));
+    lastExtractedCount = Math.max(lastExtractedCount, extracted.length);
+
+    const extractedUrls = extracted.map((connection) => connection.linkedinProfileUrl).filter(Boolean);
+    const knownRows = inventoryRepository.findByProfileUrls
+      ? await inventoryRepository.findByProfileUrls(extractedUrls)
+      : [];
+    const knownUrls = new Set(knownRows.map((row) => row.linkedinProfileUrl));
+    const seenUrls = new Set();
+
+    discovered = extracted
+      .filter((connection) => {
+        if (!connection.linkedinProfileUrl) return false;
+        if (knownUrls.has(connection.linkedinProfileUrl)) return false;
+        if (seenUrls.has(connection.linkedinProfileUrl)) return false;
+        seenUrls.add(connection.linkedinProfileUrl);
+        return true;
+      })
+      .slice(0, remaining);
+
+    if (discovered.length >= remaining) {
+      return { discovered, exhausted: false };
+    }
+  }
+
+  return {
+    discovered,
+    exhausted: discovered.length < remaining && lastExtractedCount < attempts.at(-1).scanLimit
   };
 }
 

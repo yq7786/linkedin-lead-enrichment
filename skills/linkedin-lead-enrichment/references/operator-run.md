@@ -30,7 +30,7 @@ npm run guided-workflow -- --account <account> --limit <N> --skip-finalization
 
 When `.env` is complete and `--account` / `--limit` are passed, the CLI skips interactive prompts.
 
-`--limit N` means up to N useful workflow items. Existing `discovered` + `dedupe_pending` inventory rows are selected first, and LinkedIn connection scanning only tops up the batch when there are fewer than N eligible rows already waiting.
+`--limit N` means up to N useful workflow items. Existing `discovered` + `dedupe_pending` inventory rows are selected first, and LinkedIn connection scanning only tops up the batch when there are fewer than N eligible rows already waiting. If the `sync-connections` summary returns `batchSize` lower than `requested` with `exhausted = true`, the current scanner stopped after LinkedIn stopped yielding additional unseen cards.
 
 ### B. Interactive terminal
 

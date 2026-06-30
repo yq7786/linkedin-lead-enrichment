@@ -43,4 +43,6 @@ Use `npm run guided-workflow -- --skip-finalization` only for skill optimization
 
 Enrichment evidence lives in `.lead-enrichment-candidates/*.md`. The fenced JSON block at the top is the source of truth.
 
-`--limit N` means up to N eligible workflow items, not N visible LinkedIn cards. `sync-connections` first selects existing `discovered` + `dedupe_pending` rows, then scans LinkedIn only enough to top up the batch. Manual command behavior processes all eligible rows per step unless `--limit N` caps the batch size. The guided workflow filters downstream steps to the selected batch profile URLs.
+`--limit N` means up to N eligible workflow items, not N visible LinkedIn cards. `sync-connections` first selects existing `discovered` + `dedupe_pending` rows, then scans LinkedIn only enough to top up the batch to N new/unprocessed rows. Manual command behavior processes all eligible rows per step unless `--limit N` caps the batch size. The guided workflow filters downstream steps to the selected batch profile URLs.
+
+The `sync-connections` summary reports `requested`, `batchSize`, `existingSelected`, `discovered`, `upserted`, and `exhausted`. If `batchSize < requested` and `exhausted = true`, the scanner stopped after the LinkedIn connection list stopped yielding new cards; that means the current scanner could not find enough additional eligible rows, not necessarily that the account has no more connections.

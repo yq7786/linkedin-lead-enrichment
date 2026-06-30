@@ -852,6 +852,86 @@ test("createPlaywrightProfileExtractor captures LinkedIn area-style profile loca
   assert.equal(capture.identity.location, "Greater Adelaide Area");
 });
 
+test("createPlaywrightProfileExtractor does not treat comma-heavy headlines as locations", async () => {
+  const page = {
+    async goto() {},
+    async waitForLoadState() {},
+    async evaluate() {
+      return {
+        sections: [
+          {
+            text: [
+              "Nathan Hulls",
+              "",
+              "· 1st",
+              "",
+              "Partner & Head of Acquisition + Investment @ Sustainable Concrete Group | Founder, Formwork Advisory — Building a Billion Dollar Construction Business in Australia Through Sustainability, M&A + Brand Leadership",
+              "",
+              "Bendigo, Victoria, Australia",
+              "",
+              "·",
+              "",
+              "Contact info",
+              "",
+              "Sustainable Concrete Group"
+            ].join("\n"),
+            html: "<section><h1>Nathan Hulls</h1><a href=\"https://www.linkedin.com/company/sustainable-concrete-group/\">Sustainable Concrete Group</a></section>"
+          }
+        ],
+        rawHtml: "<main></main>"
+      };
+    }
+  };
+
+  const capture = await createPlaywrightProfileExtractor(page)({
+    linkedinProfileUrl: "https://www.linkedin.com/in/nathan-hulls-business-broker",
+    fullName: "Nathan Hulls"
+  });
+
+  assert.equal(capture.identity.headline, "Partner & Head of Acquisition + Investment @ Sustainable Concrete Group | Founder, Formwork Advisory — Building a Billion Dollar Construction Business in Australia Through Sustainability, M&A + Brand Leadership");
+  assert.equal(capture.identity.location, "Bendigo, Victoria, Australia");
+});
+
+test("createPlaywrightProfileExtractor keeps comma-heavy coaching headline separate from country-only location", async () => {
+  const page = {
+    async goto() {},
+    async waitForLoadState() {},
+    async evaluate() {
+      return {
+        sections: [
+          {
+            text: [
+              "Krystle Jencik",
+              "",
+              "· 1st",
+              "",
+              "The Social Mechanic | Coaching men to navigate the social mechanics of dating, career, and life without burning out, or pretending to be someone they’re not |  | ADHD & Autistic Friendly",
+              "",
+              "Australia",
+              "",
+              "·",
+              "",
+              "Contact info",
+              "",
+              "Mingle Co."
+            ].join("\n"),
+            html: "<section><h1>Krystle Jencik</h1><a href=\"https://www.linkedin.com/company/mingle-co/\">Mingle Co.</a></section>"
+          }
+        ],
+        rawHtml: "<main></main>"
+      };
+    }
+  };
+
+  const capture = await createPlaywrightProfileExtractor(page)({
+    linkedinProfileUrl: "https://www.linkedin.com/in/krystlejencik",
+    fullName: "Krystle Jencik"
+  });
+
+  assert.equal(capture.identity.headline, "The Social Mechanic | Coaching men to navigate the social mechanics of dating, career, and life without burning out, or pretending to be someone they’re not |  | ADHD & Autistic Friendly");
+  assert.equal(capture.identity.location, "Australia");
+});
+
 test("extractCurrentCompanyFromProfileHtml prefers experience company links", () => {
   const company = extractCurrentCompanyFromProfileHtml(`
     <main>

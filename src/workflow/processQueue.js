@@ -497,10 +497,15 @@ function extractLocationFromProfileText(profileText) {
 }
 
 function isLikelyProfileLocation(line) {
+  const value = String(line ?? "").trim();
+  if (!value || value.length > 80) return false;
+  if (/[|@]/.test(value)) return false;
+  if (/[.!?]/.test(value)) return false;
+  if (/^(Contact info|Message|Follow|Connect|Sales Insights|Key signals)$/i.test(value)) return false;
   return (
-    line.includes(",") ||
-    /\b(Australia|United States|United Kingdom|Canada|India|New Zealand|Singapore)\b/i.test(line) ||
-    /\bArea$/i.test(line)
+    value.includes(",") ||
+    /\b(Australia|United States|United Kingdom|Canada|India|New Zealand|Singapore)\b/i.test(value) ||
+    /\bArea$/i.test(value)
   );
 }
 
