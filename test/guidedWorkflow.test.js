@@ -526,3 +526,109 @@ test("runGuidedWorkflow retries a partial sync batch when exhaustion is not prov
   assert.equal(contextClosed, true);
   assert.equal(clientEnded, true);
 });
+
+test("runGuidedWorkflow stops on partial sync when true exhaustion is proven", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "guided-workflow-exhausted-"));
+  const syncLimits = [];
+  const logs = [];
+  const client = {
+    async connect() {},
+    async end() {},
+    async query(sql, params) {
+      if (/select workflow_status as status/i.test(sql)) {
+        return { rows: [{ status: "skipped_not_fit", count: String(params[0].length) }] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const dependencies = {
+    validateConfig() {
+      return {
+        databaseUrl: "postgres://example",
+        linkedinBrowserProfilePath: path.join(directory, ".linkedin-browser-profile"),
+        portalQualifiedIngestUrl: "https://portal.example/ingest",
+        portalCallbackSecret: "secret",
+        defaultBatchLimit: 50
+      };
+    },
+    async createDbClient() {
+      return client;
+    },
+    async importPlaywright() {
+      return {};
+    },
+    async createLinkedInBrowserSession() {
+      return {
+        pages() {
+          return [{}];
+        },
+        async close() {}
+      };
+    },
+    async syncLinkedInConnections(input) {
+      syncLimits.push(input.limit);
+      const profileUrls = Array.from({ length: 10 }, (_, index) =>
+        `https://www.linkedin.com/in/exhausted-person-${index + 1}`
+      );
+      return {
+        connections: profileUrls.map((linkedinProfileUrl) => ({ linkedinProfileUrl })),
+        profileUrls,
+        inventoryIds: profileUrls.map((_, index) => `inventory-${index + 1}`),
+        summary: {
+          requested: input.limit,
+          batchSize: 10,
+          existingSelected: 0,
+          discovered: 10,
+          upserted: 10,
+          remaining: input.limit - 10,
+          exhausted: true,
+          scanAttempts: 3
+        }
+      };
+    },
+    async processQueuedProfiles(input) {
+      return { summary: { extracted: input.profileUrls.length, failed: 0 } };
+    },
+    async syncCompanyProfiles(input) {
+      return { summary: { companiesProcessed: input.profileUrls.length, failed: 0 } };
+    },
+    async dedupeInventory(input) {
+      return { summary: { queued: input.profileUrls.length, matchedExisting: 0, needsReview: 0 } };
+    },
+    async syncLinkedInActivityItems(input) {
+      return { summary: { profilesProcessed: input.profileUrls.length, activitiesCaptured: 0, failed: 0 } };
+    },
+    async scoreExtractedProfiles(input) {
+      return { summary: { fitScored: 0, skippedNotFit: input.inventoryIds.length, failed: 0 } };
+    },
+    async syncCompanyWebsites() {
+      return { summary: { websitesProcessed: 0, failed: 0 } };
+    },
+    async submitQualifiedCandidates() {
+      return { summary: { submitted: 0, wouldSubmit: 0, skipped: 0, failed: 0 } };
+    },
+    async waitForLinkedInLogin() {
+      return { status: "session_ready" };
+    }
+  };
+
+  const result = await runGuidedWorkflow({
+    answers: {
+      databaseUrl: "postgres://example",
+      openaiApiKey: "sk-test",
+      portalQualifiedIngestUrl: "https://portal.example/ingest",
+      portalCallbackSecret: "secret",
+      linkedinAccount: "Haydn",
+      connectionLimit: 30
+    },
+    cwd: directory,
+    env: {},
+    log: (message) => logs.push(message),
+    dependencies
+  });
+
+  assert.deepEqual(syncLimits, [30]);
+  assert.equal(result.processed, 10);
+  assert.match(logs.join("\n"), /Sync exhausted after preparing 10 of 30 requested; 20 remain/);
+});

@@ -276,6 +276,83 @@ test("syncLinkedInConnections keeps scanning until the requested limit is filled
   assert.equal(writes[0][19].linkedinProfileUrl, "https://www.linkedin.com/in/new-person-20");
 });
 
+test("syncLinkedInConnections keeps scanning while LinkedIn reveals more cards even if many are already known", async () => {
+  const scanRequests = [];
+  const writes = [];
+  const knownUrls = new Set(
+    Array.from({ length: 15 }, (_, index) => `https://www.linkedin.com/in/already-known-${index + 1}`)
+  );
+
+  const result = await syncLinkedInConnections({
+    limit: 10,
+    extractConnections: async ({ scanLimit, scrollPasses }) => {
+      scanRequests.push({ scanLimit, scrollPasses });
+      const cards = [];
+      for (let index = 1; index <= 15; index += 1) {
+        cards.push({
+          profileHref: `https://www.linkedin.com/in/already-known-${index}/`,
+          text: `Known ${index}\nFounder at Old Co`
+        });
+      }
+      const newVisible = scrollPasses >= 6 ? 10 : 4;
+      for (let index = 1; index <= newVisible; index += 1) {
+        cards.push({
+          profileHref: `https://www.linkedin.com/in/new-person-${index}/`,
+          text: `New Person ${index}\nFounder at New Co`
+        });
+      }
+      return normalizeConnectionCards(cards);
+    },
+    inventoryRepository: {
+      listEligibleForEnrichment: async () => [],
+      findByProfileUrls: async (profileUrls) =>
+        profileUrls
+          .filter((url) => knownUrls.has(url))
+          .map((url) => ({
+            id: `known-${url}`,
+            linkedinProfileUrl: url,
+            workflowStatus: "submitted",
+            dedupeStatus: "dedupe_pending"
+          })),
+      upsertMany: async (records) => {
+        writes.push(records);
+        return { upserted: records.length };
+      }
+    }
+  });
+
+  assert.deepEqual(scanRequests.map((request) => request.scrollPasses), [3, 6]);
+  assert.equal(result.summary.batchSize, 10);
+  assert.equal(result.summary.discovered, 10);
+  assert.equal(result.summary.exhausted, false);
+  assert.equal(writes[0].length, 10);
+});
+
+test("syncLinkedInConnections reports exhaustion only after LinkedIn stops yielding additional cards", async () => {
+  const result = await syncLinkedInConnections({
+    limit: 8,
+    extractConnections: async ({ scrollPasses }) => {
+      const visible = scrollPasses >= 6 ? 5 : 4;
+      return normalizeConnectionCards(
+        Array.from({ length: visible }, (_, index) => ({
+          profileHref: `https://www.linkedin.com/in/person-${index + 1}/`,
+          text: `Person ${index + 1}\nFounder at Company ${index + 1}`
+        }))
+      );
+    },
+    inventoryRepository: {
+      listEligibleForEnrichment: async () => [],
+      findByProfileUrls: async () => [],
+      upsertMany: async (records) => ({ upserted: records.length })
+    }
+  });
+
+  assert.equal(result.summary.batchSize, 5);
+  assert.equal(result.summary.remaining, 3);
+  assert.equal(result.summary.exhausted, true);
+  assert.equal(result.summary.scanAttempts, 3);
+});
+
 test("extractConnectionCardsFromPage scrolls until requested connections are loaded", async () => {
   let scrolls = 0;
   const page = {
@@ -309,6 +386,38 @@ test("extractConnectionCardsFromPage scrolls until requested connections are loa
 
   assert.equal(connections.length, 20);
   assert.equal(scrolls >= 5, true);
+});
+
+test("extractConnectionCardsFromPage keeps scanning past the requested useful limit when scanLimit is higher", async () => {
+  let scrolls = 0;
+  const page = {
+    async goto() {},
+    async waitForLoadState() {},
+    async waitForTimeout() {},
+    async evaluate(fn, scanLimit) {
+      if (typeof scanLimit === "undefined") {
+        scrolls += 1;
+        return null;
+      }
+
+      const loaded = Math.min(80, scrolls * 10);
+      return Array.from({ length: loaded }, (_, index) => ({
+        profileHref: `https://www.linkedin.com/in/person-${index + 1}/`,
+        text: `Person ${index + 1}\nFounder at Company ${index + 1}`
+      }));
+    }
+  };
+
+  const connections = await extractConnectionCardsFromPage(page, {
+    limit: 20,
+    scanLimit: 80,
+    scrollPasses: 3,
+    maxScrollPasses: 8,
+    stableScrollPasses: 2
+  });
+
+  assert.equal(connections.length, 80);
+  assert.equal(scrolls >= 8, true);
 });
 
 test("syncLinkedInConnections dry-run reports top-up batch without writing inventory", async () => {

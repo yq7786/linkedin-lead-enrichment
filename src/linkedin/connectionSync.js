@@ -9,8 +9,8 @@ export async function extractConnectionCardsFromPage(page, options = {}) {
   await page.waitForLoadState?.("networkidle", { timeout: options.networkIdleTimeoutMs ?? 10000 }).catch(() => {});
   await waitForLinkedInBlockersToClear(page, { log: options.log });
   const resultLimit = options.scanLimit ?? options.limit;
-  const requestedLimit = options.limit ?? resultLimit;
-  const maxScrollPasses = options.maxScrollPasses ?? Math.max(options.scrollPasses ?? 3, requestedLimit ? Math.ceil(requestedLimit / 4) + 3 : 8);
+  const maxScrollTarget = resultLimit ?? options.limit;
+  const maxScrollPasses = options.maxScrollPasses ?? Math.max(options.scrollPasses ?? 3, maxScrollTarget ? Math.ceil(maxScrollTarget / 4) + 3 : 8);
   const stableScrollPasses = options.stableScrollPasses ?? 2;
   let rawCards = [];
   let normalized = [];
@@ -26,7 +26,7 @@ export async function extractConnectionCardsFromPage(page, options = {}) {
       stablePasses += 1;
     }
 
-    if (requestedLimit && normalized.length >= requestedLimit) break;
+    if (resultLimit && normalized.length >= resultLimit) break;
     if (pass >= (options.scrollPasses ?? 3) && stablePasses >= stableScrollPasses) break;
     await autoScroll(page, 1);
     await waitForLinkedInBlockersToClear(page, { log: options.log });
