@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 import { detectLinkedInBlockers, waitForLinkedInBlockersToClear } from "../src/linkedin/browser.js";
 import { openLinkedInLoginSession, waitForLinkedInLogin } from "../src/linkedin/login.js";
 
-test("openLinkedInLoginSession waits for LinkedIn login with the persistent profile before closing", async () => {
+test("openLinkedInLoginSession recognizes an already logged-in persistent profile before closing", async () => {
   const calls = [];
+  const logs = [];
   const page = {
     async goto(url, options) {
       calls.push(["goto", url, options.waitUntil]);
@@ -30,7 +31,7 @@ test("openLinkedInLoginSession waits for LinkedIn login with the persistent prof
     },
     waitForLogin: async (pageForLogin) => {
       calls.push(["waitForLogin", pageForLogin === page]);
-      return waitForLinkedInLogin(pageForLogin, { pollIntervalMs: 1, log: () => undefined });
+      return waitForLinkedInLogin(pageForLogin, { pollIntervalMs: 1, log: (message) => logs.push(message) });
     }
   });
 
@@ -38,10 +39,11 @@ test("openLinkedInLoginSession waits for LinkedIn login with the persistent prof
   assert.deepEqual(calls, [
     ["createSession", ".linkedin-browser-profile"],
     ["waitForLogin", true],
-    ["goto", "https://www.linkedin.com/login", "domcontentloaded"],
+    ["goto", "https://www.linkedin.com/feed/", "domcontentloaded"],
     ["textContent", "body"],
     ["close"]
   ]);
+  assert.deepEqual(logs, []);
 });
 
 test("openLinkedInLoginSession keeps browser open while checkpoint is cleared", async () => {
@@ -80,7 +82,7 @@ test("openLinkedInLoginSession keeps browser open while checkpoint is cleared", 
 
   assert.deepEqual(result, { status: "session_ready" });
   assert.deepEqual(calls, [
-    ["goto", "https://www.linkedin.com/login", "domcontentloaded"],
+    ["goto", "https://www.linkedin.com/feed/", "domcontentloaded"],
     ["textContent"],
     ["textContent"],
     ["textContent"],
@@ -127,6 +129,7 @@ test("waitForLinkedInBlockersToClear keeps polling the same page until checkpoin
 
 test("waitForLinkedInLogin keeps polling while login is expired", async () => {
   const calls = [];
+  const logs = [];
   let currentIndex = 0;
   const responses = [
     "LinkedIn Sign in",
@@ -153,16 +156,17 @@ test("waitForLinkedInLogin keeps polling while login is expired", async () => {
   const result = await waitForLinkedInLogin(page, {
     timeoutMs: 1000,
     pollIntervalMs: 1,
-    log: () => undefined
+    log: (message) => logs.push(message)
   });
 
   assert.deepEqual(result, { status: "session_ready" });
   assert.deepEqual(calls, [
-    ["goto", "https://www.linkedin.com/login", "domcontentloaded"],
+    ["goto", "https://www.linkedin.com/feed/", "domcontentloaded"],
     ["textContent", "body"],
     ["textContent", "body"],
     ["textContent", "body"]
   ]);
+  assert.match(logs.join("\n"), /Log in to LinkedIn in the opened browser/);
 });
 
 test("detectLinkedInBlockers does not treat profile chrome sign-in text as expired auth", () => {

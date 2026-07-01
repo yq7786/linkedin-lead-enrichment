@@ -2,6 +2,7 @@ import { createLinkedInBrowserSession, detectLinkedInBlockers, waitForLinkedInBl
 
 const DEFAULT_LOGIN_TIMEOUT_MS = 15 * 60 * 1000;
 const DEFAULT_LOGIN_POLL_INTERVAL_MS = 2000;
+const LINKEDIN_SESSION_CHECK_URL = "https://www.linkedin.com/feed/";
 
 export async function openLinkedInLoginSession({
   profilePath,
@@ -27,8 +28,8 @@ export async function waitForLinkedInLogin(
   } = {}
 ) {
   const startedAt = Date.now();
-  await page.goto("https://www.linkedin.com/login", { waitUntil: "domcontentloaded" });
-  log("Log in to LinkedIn in the opened browser. This command will wait until the session is ready.");
+  let loginNoticeShown = false;
+  await page.goto(LINKEDIN_SESSION_CHECK_URL, { waitUntil: "domcontentloaded" });
 
   while (true) {
     const pageText = (await page.textContent("body").catch(() => "")) ?? "";
@@ -39,6 +40,10 @@ export async function waitForLinkedInLogin(
     }
     if (!blocker.blocked) {
       return { status: "session_ready" };
+    }
+    if (!loginNoticeShown) {
+      log("Log in to LinkedIn in the opened browser. This command will wait until the session is ready.");
+      loginNoticeShown = true;
     }
     if (Date.now() - startedAt >= timeoutMs) {
       return { status: "login_required" };
