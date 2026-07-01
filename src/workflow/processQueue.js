@@ -28,6 +28,8 @@ export async function processQueuedProfiles({
         await candidateRepository?.upsertCandidate({
           inventoryId: item.id,
           fullName: item.fullName ?? item.full_name,
+          firstName: capture.identity?.firstName,
+          lastName: capture.identity?.lastName,
           patch: {
             identity: capture.identity,
             profileCapture: {
@@ -40,7 +42,11 @@ export async function processQueuedProfiles({
           status: "profile_captured"
         });
 
-        await queueRepository.updateInventoryCompanyFromFacts?.(item, capture);
+        if (queueRepository.updateInventoryFromCapture) {
+          await queueRepository.updateInventoryFromCapture(item, capture);
+        } else {
+          await queueRepository.updateInventoryCompanyFromFacts?.(item, capture);
+        }
         await queueRepository.markLinkedInExtracted(item.id);
       }
     } catch (error) {
@@ -401,7 +407,30 @@ export class ProcessQueueRepository {
   }
 
   async saveProfileFacts(item, capture) {
-    await this.updateInventoryCompanyFromFacts(item, capture);
+    await this.updateInventoryFromCapture(item, capture);
+  }
+
+  async updateInventoryFromCapture(item, capture) {
+    const fullName = buildFullName(capture.identity);
+    const headline = capture.identity?.headline ?? null;
+    const { currentCompanyName, currentCompanyLinkedInUrl } = capture.facts ?? {};
+    if (!fullName && !headline && !currentCompanyName && !currentCompanyLinkedInUrl) return;
+
+    await this.client.query(
+      `update linkedin_connection_inventory
+       set full_name = coalesce($1, full_name),
+           headline = coalesce($2, headline),
+           current_company_name = coalesce($3, current_company_name),
+           current_company_url = coalesce($4, current_company_url)
+       where id = $5`,
+      [
+        fullName,
+        headline,
+        currentCompanyName ?? null,
+        currentCompanyLinkedInUrl ?? null,
+        item.id
+      ]
+    );
   }
 
   async updateInventoryCompanyFromFacts(item, capture) {
@@ -444,6 +473,13 @@ export class ProcessQueueRepository {
 function splitName(fullName = "") {
   const parts = String(fullName).trim().split(/\s+/).filter(Boolean);
   return { firstName: parts[0] ?? null, lastName: parts.slice(1).join(" ") || null };
+}
+
+function buildFullName(identity = {}) {
+  return [identity?.firstName, identity?.lastName]
+    .map((part) => String(part ?? "").trim())
+    .filter(Boolean)
+    .join(" ") || null;
 }
 
 function normalizeProfileUrlFilter(profileUrls) {
@@ -592,6 +628,18 @@ function findExperienceRoleAnchors(lines) {
       continue;
     }
 
+    if (dateIndex >= 2 && isPlainCompanyLine(lines[dateIndex - 1], lines[dateIndex - 2])) {
+      anchors.push({
+        roleStartIndex: dateIndex - 2,
+        dateIndex,
+        title: lines[dateIndex - 2] ?? null,
+        companyName: cleanCompanyName(lines[dateIndex - 1]),
+        startDate,
+        endDate
+      });
+      continue;
+    }
+
     const groupHeader = findGroupedCompanyHeader(lines, dateIndex);
     if (!groupHeader) continue;
 
@@ -653,6 +701,23 @@ function isCompanyEmploymentLine(line) {
   return /\s·\s/.test(String(line ?? "")) && !isEmploymentSummaryLine(line);
 }
 
+function isPlainCompanyLine(line, previousLine) {
+  const value = String(line ?? "").trim();
+  const previous = String(previousLine ?? "").trim();
+  if (!value || !previous) return false;
+  if (/[.!?]$/.test(previous)) return false;
+  if (isDateLine(value) || isDateLine(previous)) return false;
+  if (isExperienceNoiseLine(value) || isExperienceNoiseLine(previous)) return false;
+  if (isExperienceLocationLine(value) || isExperienceLocationLine(previous)) return false;
+  if (isEmploymentSummaryLine(value) || isEmploymentSummaryLine(previous)) return false;
+  if (isSectionBodyHeading(value)) return false;
+  return value.length <= 120 && previous.length <= 120;
+}
+
+function isSectionBodyHeading(line) {
+  return /^(about|description|responsibilities|achievements|services|our vision|meet the expert)$/i.test(String(line ?? "").trim());
+}
+
 function isEmploymentSummaryLine(line) {
   return /^(Full-time|Part-time|Contract|Self-employed|Freelance|Internship|Apprenticeship|Temporary)(\s*·|$)/i.test(String(line ?? ""));
 }
@@ -702,6 +767,7 @@ function isExperienceLocationLine(line) {
   if (!value || isDateLine(value)) return false;
   if (/^(Australia|United States|United Kingdom|Canada|India|New Zealand|Singapore)$/i.test(value)) return true;
   if (/^(Australia|United States|United Kingdom|Canada|India|New Zealand|Singapore)\s·\s(?:Remote|Hybrid|On-site)$/i.test(value)) return true;
+  if (/\bArea$/i.test(value)) return true;
   return value.length < 80 && value.includes(",") && !/[.!?]/.test(value);
 }
 

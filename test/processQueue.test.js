@@ -50,16 +50,30 @@ test("processQueuedProfiles saves candidate file and marks linkedin_extracted in
       listQueued: async () => [
         { id: "inventory_1", linkedinProfileUrl: "https://www.linkedin.com/in/jane-smith" }
       ],
+      updateInventoryFromCapture: async (item, capture) =>
+        writes.push(["inventory", item.id, capture.identity.firstName, capture.identity.headline]),
       markLinkedInExtracted: async (id) => writes.push(["status", id])
     },
     candidateRepository: {
       upsertCandidate: async (input) =>
-        writes.push(["candidate", input.inventoryId, input.patch.profileCapture.facts.currentCompanyName, input.status])
+        writes.push([
+          "candidate",
+          input.inventoryId,
+          input.firstName,
+          input.lastName,
+          input.patch.profileCapture.facts.currentCompanyName,
+          input.status
+        ])
     },
     extractProfile: async (item) => ({
       source: "linkedin_profile",
       sourceUrl: item.linkedinProfileUrl,
-      identity: { firstName: "Jane", lastName: "Smith", linkedinProfileUrl: item.linkedinProfileUrl },
+      identity: {
+        firstName: "Jane",
+        lastName: "Smith",
+        linkedinProfileUrl: item.linkedinProfileUrl,
+        headline: "Founder at Acme AI"
+      },
       facts: {
         about: null,
         currentCompanyName: "Acme AI",
@@ -74,7 +88,8 @@ test("processQueuedProfiles saves candidate file and marks linkedin_extracted in
 
   assert.deepEqual(result.summary, { extracted: 1, failed: 0 });
   assert.deepEqual(writes, [
-    ["candidate", "inventory_1", "Acme AI", "profile_captured"],
+    ["candidate", "inventory_1", "Jane", "Smith", "Acme AI", "profile_captured"],
+    ["inventory", "inventory_1", "Jane", "Founder at Acme AI"],
     ["status", "inventory_1"]
   ]);
 });
@@ -297,8 +312,46 @@ test("ProcessQueueRepository backfills inventory company fields from profile fac
 
   assert.match(queries[0].sql, /update linkedin_connection_inventory/i);
   assert.deepEqual(queries[0].params, [
+    null,
+    null,
     "Acme AI",
     "https://www.linkedin.com/company/acme-ai",
+    "inventory_1"
+  ]);
+});
+
+test("ProcessQueueRepository backfills inventory identity and company fields from profile capture", async () => {
+  const queries = [];
+  const repository = new ProcessQueueRepository({
+    async query(sql, params) {
+      queries.push({ sql, params });
+      return { rows: [], rowCount: 1 };
+    }
+  });
+
+  await repository.updateInventoryFromCapture(
+    { id: "inventory_1" },
+    {
+      identity: {
+        firstName: "James",
+        lastName: "Harman",
+        headline: "I help Tech Companies build high performance Leadership Teams Globally."
+      },
+      facts: {
+        currentCompanyName: "Snap Talent International",
+        currentCompanyLinkedInUrl: "https://www.linkedin.com/company/snap-talent-international"
+      }
+    }
+  );
+
+  assert.match(queries[0].sql, /full_name = coalesce\(\$1, full_name\)/i);
+  assert.match(queries[0].sql, /headline = coalesce\(\$2, headline\)/i);
+  assert.match(queries[0].sql, /current_company_name = coalesce\(\$3, current_company_name\)/i);
+  assert.deepEqual(queries[0].params, [
+    "James Harman",
+    "I help Tech Companies build high performance Leadership Teams Globally.",
+    "Snap Talent International",
+    "https://www.linkedin.com/company/snap-talent-international",
     "inventory_1"
   ]);
 });
@@ -654,6 +707,87 @@ test("createPlaywrightProfileExtractor falls back to dedicated experience page w
       description: "Built a responsive wealth management dashboard."
     }
   ]);
+});
+
+test("createPlaywrightProfileExtractor parses plain title company date experience rows", async () => {
+  const calls = [];
+  const page = {
+    async goto(url) {
+      calls.push(["goto", url]);
+    },
+    async waitForLoadState() {},
+    async evaluate() {
+      if (calls.at(-1)?.[1]?.endsWith("/details/experience/")) {
+        return {
+          sections: [
+            {
+              text: [
+                "Experience",
+                "",
+                "CEO",
+                "",
+                "Snap Talent International",
+                "",
+                "Jan 2014 - Present · 12 yrs 7 mos",
+                "",
+                "Greater Sydney Area",
+                "",
+                "ABOUT SNAP TALENT INTERNATIONAL",
+                "",
+                "Snap Talent International is reshaping modern recruitment."
+              ].join("\n"),
+              html: "<section><h1>Experience</h1><a href=\"https://www.linkedin.com/company/snap-talent-international/\">Snap Talent International</a></section>"
+            }
+          ],
+          rawHtml: "<main></main>"
+        };
+      }
+
+      return {
+        sections: [
+          {
+            text: [
+              "James Harman",
+              "",
+              "I help Tech Companies build high performance Leadership Teams Globally.",
+              "",
+              "Sydney, New South Wales, Australia",
+              "",
+              "Contact info",
+              "",
+              "Snap Talent International"
+            ].join("\n"),
+            html: "<section><h1>James Harman</h1></section>"
+          },
+          {
+            text: ["About", "", "At Snap Talent, we don’t just fill roles."].join("\n"),
+            html: "<section><h2>About</h2></section>"
+          }
+        ],
+        rawHtml: "<main></main>"
+      };
+    }
+  };
+
+  const capture = await createPlaywrightProfileExtractor(page)({
+    linkedinProfileUrl: "https://www.linkedin.com/in/jameslharman",
+    fullName: null
+  });
+
+  assert.equal(capture.facts.currentCompanyName, "Snap Talent International");
+  assert.equal(
+    capture.facts.currentCompanyLinkedInUrl,
+    "https://www.linkedin.com/company/snap-talent-international"
+  );
+  assert.equal(capture.facts.currentRoleTitle, "CEO");
+  assert.equal(capture.facts.currentRoleStartDate, "Jan 2014");
+  assert.deepEqual(capture.facts.jobHistory[0], {
+    title: "CEO",
+    companyName: "Snap Talent International",
+    startDate: "Jan 2014",
+    endDate: null,
+    description: "ABOUT SNAP TALENT INTERNATIONAL\nSnap Talent International is reshaping modern recruitment."
+  });
 });
 
 test("createPlaywrightProfileExtractor prefers dedicated experience page job history", async () => {
