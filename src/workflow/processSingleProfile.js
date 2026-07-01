@@ -141,6 +141,7 @@ export class SingleProfileRepository {
          current_company_name,
          current_company_url,
          account,
+         processing_source,
          dedupe_status,
          workflow_status
        from linkedin_connection_inventory
@@ -156,18 +157,20 @@ export class SingleProfileRepository {
       `insert into linkedin_connection_inventory (
          linkedin_profile_url,
          account,
+         processing_source,
          dedupe_status,
          workflow_status,
          last_seen_at
        )
-       values ($1, $2, 'dedupe_pending', 'discovered', now())
+       values ($1, $2, $3, 'dedupe_pending', 'discovered', now())
        returning
          id,
          linkedin_profile_url,
          account,
+         processing_source,
          dedupe_status,
          workflow_status`,
-      [profileUrl, account]
+      [profileUrl, account, "process_profile"]
     );
     return toCamelInventory(result.rows[0]);
   }
@@ -265,6 +268,7 @@ function toCamelInventory(row) {
     currentCompanyName: row.current_company_name ?? null,
     currentCompanyUrl: row.current_company_url ?? null,
     account: row.account ?? null,
+    processingSource: row.processing_source ?? null,
     dedupeStatus: row.dedupe_status ?? null,
     workflowStatus: row.workflow_status ?? null
   };

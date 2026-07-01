@@ -29,6 +29,7 @@ test("normalizeConnectionCards dedupes and maps raw LinkedIn card data to invent
       currentCompanyName: null,
       currentCompanyUrl: null,
       account: null,
+      processingSource: "connection_sync",
       dedupeStatus: "dedupe_pending",
       workflowStatus: "discovered"
     }
@@ -80,6 +81,7 @@ test("syncLinkedInConnections writes normalized records in live mode", async () 
   assert.equal(result.status, "synced");
   assert.equal(result.upserted, 1);
   assert.equal(writes[0][0].linkedinProfileUrl, "https://www.linkedin.com/in/jane-smith");
+  assert.equal(writes[0][0].processingSource, "connection_sync");
 });
 
 test("syncLinkedInConnections stamps the selected LinkedIn account on records", async () => {
@@ -517,10 +519,12 @@ test("ConnectionInventoryRepository upserts by normalized profile URL", async ()
   assert.equal(result.upserted, 1);
   assert.match(queries[0].sql, /on conflict \(lower\(linkedin_profile_url\)\)/i);
   assert.match(queries[0].sql, /account/i);
+  assert.match(queries[0].sql, /processing_source = coalesce\(linkedin_connection_inventory\.processing_source, excluded\.processing_source\)/i);
   assert.deepEqual(queries[0].params.slice(0, 3), [
     "https://www.linkedin.com/in/jane-smith",
     "Jane Smith",
     "Founder at Acme AI"
   ]);
   assert.equal(queries[0].params[5], "Kirk");
+  assert.equal(queries[0].params[6], "connection_sync");
 });

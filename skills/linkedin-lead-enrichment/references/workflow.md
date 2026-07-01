@@ -71,6 +71,8 @@ single profile status summary
 
 Do not run `sync-connections` in this mode. Do not run `score-fits` in this mode. The user-supplied profile is treated as operator-trusted and receives a manual `fit` block after dedupe clears.
 
+Rows created by this path must set `linkedin_connection_inventory.processing_source = 'process_profile'`. Batch connection sync rows use `processing_source = 'connection_sync'`. Preserve an existing non-null `processing_source` on upsert so a later batch scan does not erase single-profile provenance.
+
 Before opening LinkedIn, `process-profile` checks for an existing inventory row with the same normalized profile URL. If one exists, stop and ask the user: "This lead already exists in the workflow inventory. What would you like me to do? Re-process — delete only this lead's existing candidate file/inventory record, then process it fresh. Skip — leave the existing record untouched." Skip exits with no changes. Re-process deletes only the matching candidate markdown file and only the matching inventory row, then recreates that row for the supplied profile URL. This duplicate re-process branch is the only approved AI deletion case.
 
 Portal submission runs by default. Use `--skip-finalization` only for explicit testing runs that should stop before portal submission.

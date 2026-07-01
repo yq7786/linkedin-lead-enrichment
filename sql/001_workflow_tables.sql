@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS linkedin_connection_inventory (
   current_company_name text,
   current_company_url text,
   account text,
+  processing_source text,
   discovered_at timestamptz NOT NULL DEFAULT now(),
   last_seen_at timestamptz,
   individual_id integer REFERENCES new_individual(id) ON DELETE SET NULL ON UPDATE CASCADE,
@@ -36,6 +37,9 @@ CREATE TABLE IF NOT EXISTS linkedin_connection_inventory (
 
 ALTER TABLE linkedin_connection_inventory
   ADD COLUMN IF NOT EXISTS account text;
+
+ALTER TABLE linkedin_connection_inventory
+  ADD COLUMN IF NOT EXISTS processing_source text;
 
 CREATE UNIQUE INDEX IF NOT EXISTS linkedin_connection_inventory_profile_url_idx
   ON linkedin_connection_inventory (lower(linkedin_profile_url))

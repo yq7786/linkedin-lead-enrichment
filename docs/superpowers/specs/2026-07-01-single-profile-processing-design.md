@@ -86,7 +86,7 @@ The single-profile run should execute this sequence:
 4. Check `linkedin_connection_inventory` for duplicates.
 5. If duplicate exists, ask the operator to re-process or skip.
 6. If re-processing, delete the matching candidate markdown file and inventory row.
-7. Seed a fresh inventory row for the normalized profile URL.
+7. Seed a fresh inventory row for the normalized profile URL with `processing_source = 'process_profile'`.
 8. Open one persistent Playwright LinkedIn browser session.
 9. Wait for login, checkpoint, CAPTCHA, or security blockers to clear using existing behavior.
 10. Run `process-queue` behavior for only the seeded profile URL.

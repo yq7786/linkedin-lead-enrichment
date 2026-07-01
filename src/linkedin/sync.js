@@ -8,6 +8,7 @@ export function toInventoryRecord(connection) {
     currentCompanyName: connection.currentCompanyName ?? null,
     currentCompanyUrl: connection.currentCompanyUrl ?? null,
     account: connection.account ?? null,
+    processingSource: connection.processingSource ?? "connection_sync",
     dedupeStatus: "dedupe_pending",
     workflowStatus: "discovered"
   };

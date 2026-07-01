@@ -150,6 +150,7 @@ test("runProcessSingleProfile seeds and processes one fresh profile through subm
   const candidate = await candidateRepository.findByInventoryId("inventory-1");
   assert.equal(candidate.candidate.status, "qualified");
   assert.equal(candidate.fit.mode, "manual_single_profile");
+  assert.equal(repository.rows[0].processingSource, "process_profile");
   assert.equal(repository.rows[0].workflowStatus, "qualified");
 });
 
@@ -281,6 +282,8 @@ test("SingleProfileRepository reads, seeds, marks, and deletes inventory rows", 
 
   assert.match(queries[0].sql, /lower\(linkedin_profile_url\) = lower\(\$1\)/i);
   assert.match(queries[1].sql, /insert into linkedin_connection_inventory/i);
+  assert.match(queries[1].sql, /processing_source/i);
+  assert.equal(queries[1].params[2], "process_profile");
   assert.match(queries[2].sql, /workflow_status = 'qualified'/i);
   assert.match(queries[3].sql, /delete from linkedin_connection_inventory/i);
 });
@@ -298,6 +301,7 @@ function createMemorySingleProfileRepository(initialRows = []) {
         id: `inventory-${this.nextId++}`,
         linkedinProfileUrl: profileUrl,
         account,
+        processingSource: "process_profile",
         dedupeStatus: "dedupe_pending",
         workflowStatus: "discovered"
       };

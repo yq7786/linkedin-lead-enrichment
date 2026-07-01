@@ -281,6 +281,7 @@ export class ConnectionInventoryRepository {
          current_company_name,
          current_company_url,
          account,
+         processing_source,
          dedupe_status,
          workflow_status
        from linkedin_connection_inventory
@@ -306,6 +307,7 @@ export class ConnectionInventoryRepository {
          current_company_name,
          current_company_url,
          account,
+         processing_source,
          dedupe_status,
          workflow_status
        from linkedin_connection_inventory
@@ -324,11 +326,12 @@ export class ConnectionInventoryRepository {
          current_company_name,
          current_company_url,
          account,
+         processing_source,
          dedupe_status,
          workflow_status,
          last_seen_at
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, now())
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
        on conflict (lower(linkedin_profile_url)) where linkedin_profile_url is not null
        do update set
          full_name = coalesce(excluded.full_name, linkedin_connection_inventory.full_name),
@@ -336,6 +339,7 @@ export class ConnectionInventoryRepository {
          current_company_name = coalesce(excluded.current_company_name, linkedin_connection_inventory.current_company_name),
          current_company_url = coalesce(excluded.current_company_url, linkedin_connection_inventory.current_company_url),
          account = coalesce(excluded.account, linkedin_connection_inventory.account),
+         processing_source = coalesce(linkedin_connection_inventory.processing_source, excluded.processing_source),
          last_seen_at = now()`,
       [
         record.linkedinProfileUrl,
@@ -344,6 +348,7 @@ export class ConnectionInventoryRepository {
         record.currentCompanyName,
         record.currentCompanyUrl,
         record.account,
+        record.processingSource ?? "connection_sync",
         record.dedupeStatus,
         record.workflowStatus
       ]
@@ -402,6 +407,7 @@ function inventoryRowToConnection(row) {
     currentCompanyName: row.currentCompanyName ?? row.current_company_name ?? null,
     currentCompanyUrl: row.currentCompanyUrl ?? row.current_company_url ?? null,
     account: row.account ?? null,
+    processingSource: row.processingSource ?? row.processing_source ?? "connection_sync",
     dedupeStatus: row.dedupeStatus ?? row.dedupe_status ?? "dedupe_pending",
     workflowStatus: row.workflowStatus ?? row.workflow_status ?? "discovered"
   };
@@ -416,6 +422,7 @@ function toCamelInventory(row) {
     currentCompanyName: row.current_company_name,
     currentCompanyUrl: row.current_company_url,
     account: row.account,
+    processingSource: row.processing_source ?? null,
     dedupeStatus: row.dedupe_status,
     workflowStatus: row.workflow_status
   };

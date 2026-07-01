@@ -25,6 +25,7 @@ Enrichment evidence lives in `.lead-enrichment-candidates/*.md`, not in Neon.
 | `linkedin_profile_url`, `full_name`, `headline` | Connection sync |
 | `current_company_name`, `current_company_url` | `process-queue` from the LinkedIn profile Experience details page; `sync-company-profiles` can update `current_company_name` from the company page `h1` |
 | `account` | Guided workflow connection sync; selected LinkedIn account such as `Kirk`, `Kathryn`, `Ice`, `Terri`, `Sarah`, `Siriluk`, or custom |
+| `processing_source` | Provenance for how the row entered the workflow: `connection_sync` for batch-discovered connections, `process_profile` for operator-supplied single leads |
 | `last_seen_at` | Connection sync |
 | `dedupe_status`, `dedupe_match_method` | Dedupe step |
 | `workflow_status`, `current_step` | Every workflow step |

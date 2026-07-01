@@ -72,6 +72,8 @@ This mode checks `linkedin_connection_inventory` for the normalized profile URL 
 
 Do not run `sync-connections` or `score-fits` for single-profile mode. The profile is treated as operator-supplied and manually qualified after dedupe clears, then `sync-company-websites` and `submit-qualified` run by default. Use `--skip-finalization` only when the user explicitly asks for testing without portal submission.
 
+Inventory rows created by `process-profile` are marked with `processing_source = 'process_profile'`; batch connection sync rows are marked with `processing_source = 'connection_sync'`.
+
 ## Reference routing
 
 | Task | Read |
