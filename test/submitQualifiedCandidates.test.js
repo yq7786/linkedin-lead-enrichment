@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { PortalCandidateAdapter } from "../src/adapters/portalCandidates.js";
 import {
   SubmitQualifiedCandidatesRepository,
+  isSubmittable,
   submitQualifiedCandidates
 } from "../src/workflow/submitQualifiedCandidates.js";
 
@@ -67,6 +68,25 @@ test("submitQualifiedCandidates submits only qualified unsubmitted candidates", 
     ["candidate", "inventory_1", "portal_inventory_1", "submitted"],
     ["db", "inventory_1", "portal_inventory_1"]
   ]);
+});
+
+test("isSubmittable accepts manual single-profile qualification", () => {
+  assert.equal(isSubmittable({
+    fit: {
+      mode: "manual_single_profile",
+      manuallyQualified: true,
+      fitReasoning: "Operator supplied this LinkedIn profile directly; automated fit scoring was skipped."
+    },
+    portalSubmission: { status: "not_submitted" }
+  }), true);
+
+  assert.equal(isSubmittable({
+    fit: {
+      mode: "manual_single_profile",
+      manuallyQualified: true
+    },
+    portalSubmission: { status: "submitted" }
+  }), false);
 });
 
 test("submitQualifiedCandidates dry-run builds portal payloads and reports malformed candidates", async () => {

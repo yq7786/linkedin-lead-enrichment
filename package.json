@@ -11,6 +11,7 @@
     "inspect-status": "node src/cli.js inspect-status",
     "login-linkedin": "node src/cli.js login-linkedin",
     "guided-workflow": "node src/cli.js guided-workflow",
+    "process-profile": "node src/cli.js process-profile",
     "sync-connections": "node src/cli.js sync-connections",
     "dedupe-inventory": "node src/cli.js dedupe-inventory",
     "process-queue": "node src/cli.js process-queue",

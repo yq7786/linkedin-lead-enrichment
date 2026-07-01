@@ -48,3 +48,29 @@ Enrichment evidence lives in `.lead-enrichment-candidates/*.md`. The fenced JSON
 The `sync-connections` summary reports `requested`, `batchSize`, `existingSelected`, `discovered`, `upserted`, `remaining`, `exhausted`, and `scanAttempts`. If `batchSize < requested` and `exhausted = true`, the scanner stopped after the LinkedIn connection list stopped yielding new cards; that means the current scanner could not find enough additional eligible rows, not necessarily that the account has no more connections.
 
 Do not treat a partial sync batch as complete unless `exhausted = true`, LinkedIn shows a blocker, or a downstream hard failure stops the workflow. If `batchSize < requested` and `exhausted` is not true, the guided workflow must continue trying to top up the remaining count, bounded by its partial-sync retry limit, or explicitly report the run as partial.
+
+## Single-profile workflow
+
+Use `npm run process-profile -- --profile-url <linkedin-profile-url>` when the user provides one LinkedIn profile URL, asks to process a single connection, or asks to process one lead.
+
+Single-profile mode is separate from the batch workflow:
+
+```text
+check-config / load .env
+read LINKEDIN_ACCOUNT
+check linkedin_connection_inventory duplicate by normalized profile URL
+process-queue
+sync-company-profiles
+dedupe-inventory
+sync-activities
+manual single-profile qualification
+sync-company-websites
+submit-qualified
+single profile status summary
+```
+
+Do not run `sync-connections` in this mode. Do not run `score-fits` in this mode. The user-supplied profile is treated as operator-trusted and receives a manual `fit` block after dedupe clears.
+
+Before opening LinkedIn, `process-profile` checks for an existing inventory row with the same normalized profile URL. If one exists, ask the user whether to re-process or skip. Skip exits with no changes. Re-process deletes only the matching candidate markdown file and only the matching inventory row, then recreates that row for the supplied profile URL. This duplicate re-process branch is the only approved AI deletion case.
+
+Portal submission runs by default. Use `--skip-finalization` only for explicit testing runs that should stop before portal submission.

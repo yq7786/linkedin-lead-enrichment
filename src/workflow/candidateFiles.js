@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const JSON_BLOCK_RE = /^```json\n([\s\S]*?)\n```/;
@@ -60,6 +60,18 @@ export class CandidateFileRepository {
       if (candidate.candidate?.inventoryId === inventoryId) return candidate;
     }
     return null;
+  }
+
+  async deleteByInventoryId(inventoryId) {
+    const entries = await readdir(this.directory).catch(() => []);
+    for (const entry of entries.filter((name) => name.endsWith(".md"))) {
+      const filePath = path.join(this.directory, entry);
+      const candidate = parseCandidateMarkdown(await readFile(filePath, "utf8"));
+      if (candidate.candidate?.inventoryId !== inventoryId) continue;
+      await unlink(filePath);
+      return { deleted: true, fileId: candidate.candidate?.fileId ?? path.basename(entry, ".md") };
+    }
+    return { deleted: false, fileId: null };
   }
 
   async listByStatus(status, { inventoryIds } = {}) {

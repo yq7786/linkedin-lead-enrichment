@@ -103,6 +103,30 @@ test("CandidateFileRepository lists candidates by status", async () => {
   assert.equal(qualified[0].candidate.inventoryId, "inv_1");
 });
 
+test("CandidateFileRepository deletes only the file matching an inventory id", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "candidates-delete-"));
+  const repository = new CandidateFileRepository({ directory, now: () => new Date("2026-06-26T00:00:00.000Z") });
+
+  await repository.upsertCandidate({
+    inventoryId: "inv_1",
+    fullName: "Jane Smith",
+    patch: { identity: { firstName: "Jane", lastName: "Smith" } },
+    status: "qualified"
+  });
+  await repository.upsertCandidate({
+    inventoryId: "inv_2",
+    fullName: "Pat Lee",
+    patch: { identity: { firstName: "Pat", lastName: "Lee" } },
+    status: "qualified"
+  });
+
+  const result = await repository.deleteByInventoryId("inv_1");
+
+  assert.deepEqual(result, { deleted: true, fileId: "jane-smith_inv_1" });
+  assert.equal(await repository.findByInventoryId("inv_1"), null);
+  assert.equal((await repository.findByInventoryId("inv_2")).identity.firstName, "Pat");
+});
+
 test("CandidateFileRepository read paths do not create missing directories", async () => {
   const parent = await mkdtemp(path.join(os.tmpdir(), "candidates-missing-parent-"));
   const directory = path.join(parent, "missing-candidates");

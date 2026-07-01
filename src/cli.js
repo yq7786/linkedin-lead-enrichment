@@ -4,7 +4,7 @@ import path from "node:path";
 import { validateConfig } from "./config.js";
 import { createDbClient } from "./db/client.js";
 import { runGuidedWorkflowFromCli } from "./guidedWorkflow.js";
-import { createLinkedInBrowserSession } from "./linkedin/browser.js";
+import { createLinkedInBrowserSession, waitForLinkedInBlockersToClear } from "./linkedin/browser.js";
 import {
   ConnectionInventoryRepository,
   extractConnectionCardsFromPage,
@@ -20,7 +20,7 @@ import {
   extractCompanyProfileFromPage,
   syncCompanyProfiles
 } from "./linkedin/companyProfileSync.js";
-import { openLinkedInLoginSession } from "./linkedin/login.js";
+import { openLinkedInLoginSession, waitForLinkedInLogin } from "./linkedin/login.js";
 import { selectQueuedInventory } from "./queue.js";
 import { dedupeInventory, DedupeInventoryRepository } from "./workflow/dedupeInventory.js";
 import { CandidateFileRepository } from "./workflow/candidateFiles.js";
@@ -42,6 +42,7 @@ import {
 } from "./workflow/submitQualifiedCandidates.js";
 import { captureCompanyWebsiteWithPlaywright } from "./company/websiteCapture.js";
 import { CompanyWebsiteRepository, syncCompanyWebsites } from "./workflow/syncCompanyWebsites.js";
+import { SingleProfileRepository, runProcessSingleProfile } from "./workflow/processSingleProfile.js";
 
 const command = process.argv[2] ?? "help";
 const args = process.argv.slice(3);
@@ -65,6 +66,117 @@ async function main() {
       account: readStringFlag(args, "--account"),
       limit: readNumberFlag(args, "--limit")
     });
+    return;
+  }
+
+  if (command === "process-profile") {
+    const profileUrl = readStringFlag(args, "--profile-url");
+    if (!profileUrl) throw new Error("--profile-url is required.");
+    const duplicateAction = args.includes("--reprocess")
+      ? "reprocess"
+      : args.includes("--skip-duplicate")
+        ? "skip"
+        : undefined;
+    const config = validateConfig(process.env, { dryRun: false, requireOpenAI: false });
+    const account = process.env.LINKEDIN_ACCOUNT;
+    const client = await connectedDbClient(config.databaseUrl);
+    let context;
+    let pagePromise;
+    async function getPage() {
+      if (!context) {
+        const playwright = await import("playwright");
+        context = await createLinkedInBrowserSession({
+          profilePath: config.linkedinBrowserProfilePath,
+          playwright
+        });
+      }
+      if (!pagePromise) {
+        pagePromise = (async () => {
+          const page = context.pages()[0] ?? await context.newPage();
+          await ensureLinkedInSessionForCli(page);
+          return page;
+        })();
+      }
+      return pagePromise;
+    }
+    try {
+      const candidateRepository = new CandidateFileRepository({
+        directory: path.join(process.cwd(), ".lead-enrichment-candidates")
+      });
+      const result = await runProcessSingleProfile({
+        profileUrl,
+        account,
+        duplicateAction,
+        skipFinalization: args.includes("--skip-finalization"),
+        candidateRepository,
+        dependencies: {
+          repository: new SingleProfileRepository(client),
+          processQueuedProfiles: async ({ candidateRepository, limit, profileUrls }) =>
+            processQueuedProfiles({
+              queueRepository: new ProcessQueueRepository(client),
+              candidateRepository,
+              extractProfile: async (item) => createPlaywrightProfileExtractor(await getPage(), { log: console.error })(item),
+              limit,
+              profileUrls
+            }),
+          syncCompanyProfiles: async ({ candidateRepository, limit, profileUrls }) =>
+            syncCompanyProfiles({
+              repository: new CompanyProfileRepository(client),
+              candidateRepository,
+              extractCompany: async (item) =>
+                extractCompanyProfileFromPage(await getPage(), { companyUrl: item.currentCompanyUrl, log: console.error }),
+              limit,
+              profileUrls
+            }),
+          dedupeInventory: async ({ limit, profileUrls }) =>
+            dedupeInventory({
+              inventoryRepository: new DedupeInventoryRepository(client),
+              limit,
+              profileUrls
+            }),
+          syncLinkedInActivityItems: async ({ candidateRepository, limit, profileUrls }) => {
+            const activityRepository = new ActivityItemsRepository(client);
+            return syncLinkedInActivityItems({
+              inventoryRepository: activityRepository,
+              activityRepository,
+              candidateRepository,
+              extractActivities: async (item) =>
+                extractActivityItemsFromPage(await getPage(), {
+                  profileUrl: item.linkedinProfileUrl,
+                  limit: 10,
+                  log: console.error
+                }),
+              limit,
+              profileUrls
+            });
+          },
+          syncCompanyWebsites: async ({ candidateRepository, limit, inventoryIds }) =>
+            syncCompanyWebsites({
+              candidateRepository,
+              repository: new CompanyWebsiteRepository(client),
+              captureWebsite: async (url) => captureCompanyWebsiteWithPlaywright(await getPage(), url),
+              limit,
+              inventoryIds
+            }),
+          submitQualifiedCandidates: async ({ candidateRepository, limit, inventoryIds }) =>
+            submitQualifiedCandidates({
+              candidateRepository,
+              portalCandidates: new PortalCandidateAdapter({
+                endpointUrl: config.portalQualifiedIngestUrl,
+                callbackSecret: config.portalCallbackSecret
+              }),
+              repository: new SubmitQualifiedCandidatesRepository(client),
+              limit,
+              inventoryIds
+            })
+        },
+        log: console.error
+      });
+      console.log(JSON.stringify(result, null, 2));
+    } finally {
+      await client.end();
+      await context?.close();
+    }
     return;
   }
 
@@ -363,6 +475,7 @@ Commands:
   inspect-status
   login-linkedin
   guided-workflow [--skip-finalization] [--account NAME] [--limit N]
+  process-profile --profile-url URL [--skip-finalization] [--reprocess] [--skip-duplicate]
   sync-connections [--limit N] [--dry-run]
   dedupe-inventory [--limit N] [--dry-run]
   process-queue [--limit N] [--dry-run]
@@ -377,6 +490,16 @@ Commands:
 Notes:
   sync-connections --limit N prepares up to N eligible workflow items. It selects existing discovered/dedupe_pending inventory first, then scans LinkedIn only to top up the batch.
 `);
+}
+
+async function ensureLinkedInSessionForCli(page) {
+  const result = await waitForLinkedInLogin(page, { log: console.error });
+  if (result.status === "session_ready") return;
+  if (result.status === "blocked") {
+    await waitForLinkedInBlockersToClear(page, { log: console.error });
+    return;
+  }
+  throw new Error("LinkedIn login was not completed before the timeout. Rerun the workflow when ready.");
 }
 
 async function connectedDbClient(databaseUrl) {

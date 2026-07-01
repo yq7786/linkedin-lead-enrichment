@@ -1,4 +1,5 @@
 import { classifyWorkflowError } from "../retryPolicy.js";
+import { isManualSingleProfileFit } from "./manualQualification.js";
 
 export async function submitQualifiedCandidates({
   candidateRepository,
@@ -104,12 +105,13 @@ export function validatePortalPayload(payload) {
 }
 
 export function isSubmittable(candidate) {
-  return Boolean(
+  const alreadySubmitted = candidate.portalSubmission?.status === "submitted";
+  const automatedQualified = Boolean(
     candidate.fit?.founderSignal &&
     candidate.fit?.startupSignal &&
-    candidate.fit?.recentActivitySignal &&
-    candidate.portalSubmission?.status !== "submitted"
+    candidate.fit?.recentActivitySignal
   );
+  return Boolean(!alreadySubmitted && (automatedQualified || isManualSingleProfileFit(candidate.fit)));
 }
 
 function hasIdentitySignal(identity) {

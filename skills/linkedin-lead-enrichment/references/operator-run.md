@@ -15,7 +15,7 @@ Collect configuration in chat, then run the CLI without duplicate prompts.
    - `PORTAL_CALLBACK_SECRET`
    - LinkedIn account: `kirk`, `kathryn`, `terri`, `sarah`, `ice`, `siriluk`, or a custom account name (stored in `linkedin_connection_inventory.account`)
    - Number of eligible workflow items to process — warn that processing too many connections at once might hit LinkedIn usage limits or paid API limits
-2. Write `.env` with the four env keys.
+2. Write `.env` with the four env keys plus `LINKEDIN_ACCOUNT=<account>`.
 3. Run:
 
 ```bash
@@ -28,7 +28,7 @@ For skill optimization or local testing (skips portal submission):
 npm run guided-workflow -- --account <account> --limit <N> --skip-finalization
 ```
 
-When `.env` is complete and `--account` / `--limit` are passed, the CLI skips interactive prompts.
+When `.env` is complete and `--account` / `--limit` are passed, the CLI skips interactive prompts. Guided workflow also persists `LINKEDIN_ACCOUNT` so later single-profile runs can use the same LinkedIn account without another flag.
 
 `--limit N` means up to N useful workflow items. The default batch size is 50. If N is greater than 50, `guided-workflow` runs sequential batches of 50 until it reaches N or LinkedIn stops yielding new eligible rows.
 
@@ -39,6 +39,20 @@ Never call a partial batch complete unless `exhausted = true`, LinkedIn shows a 
 ### B. Interactive terminal
 
 Run `npm run guided-workflow` and answer the built-in prompts (bulk env paste or one-by-one, then account, then limit with usage-limit warning).
+
+## Single-profile runs
+
+When the user provides one LinkedIn profile URL, asks to process a single connection, or asks to process one lead, run:
+
+```bash
+npm run process-profile -- --profile-url <linkedin-profile-url>
+```
+
+This mode reads `LINKEDIN_ACCOUNT` from `.env`, checks for an existing `linkedin_connection_inventory` row with the same normalized profile URL, skips `sync-connections`, skips `score-fits`, manually qualifies the candidate after dedupe clears, and submits to the portal by default.
+
+If a duplicate inventory row exists, ask the user whether to re-process or skip. Re-processing deletes only the matching candidate markdown file and only the matching inventory row before recreating the row and processing it again. This duplicate re-process branch is the only approved AI deletion case.
+
+Use `--skip-finalization` only for testing when the user explicitly does not want portal submission.
 
 ## Workflow guarantees
 

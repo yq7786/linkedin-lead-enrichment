@@ -115,6 +115,7 @@ export async function runGuidedWorkflow({
     OPENAI_API_KEY: answers.openaiApiKey,
     PORTAL_QUALIFIED_INGEST_URL: answers.portalQualifiedIngestUrl,
     PORTAL_CALLBACK_SECRET: answers.portalCallbackSecret,
+    LINKEDIN_ACCOUNT: answers.linkedinAccount,
     DEFAULT_BATCH_LIMIT: String(DEFAULT_GUIDED_WORKFLOW_BATCH_SIZE)
   };
   const envPath = path.join(cwd, ".env");

@@ -58,6 +58,20 @@ When `sync-connections` returns fewer rows than requested, do not call the reque
 
 If LinkedIn is not logged in or shows a checkpoint, `guided-workflow` opens the persistent Playwright browser profile and waits for the user to complete login or clear the challenge before `sync-connections`. Keep that browser open. Do not tell the user to run a separate login command unless they explicitly want to pre-login.
 
+## Process a single profile
+
+When a user provides one LinkedIn profile URL, asks to process a single connection, or asks to process one lead, use `process-profile` instead of the batch workflow:
+
+```bash
+npm run process-profile -- --profile-url <linkedin-profile-url>
+```
+
+Single-profile mode reads `LINKEDIN_ACCOUNT` from `.env`. Guided setup writes this value alongside `DATABASE_URL`, `OPENAI_API_KEY`, `PORTAL_QUALIFIED_INGEST_URL`, and `PORTAL_CALLBACK_SECRET`, so do not ask users to repeat `--account` for `process-profile`.
+
+This mode checks `linkedin_connection_inventory` for the normalized profile URL before opening LinkedIn. If an existing record is found, ask the user whether to re-process or skip. If they choose re-process, the agent may delete only the matching candidate markdown file and only the matching inventory row, then recreate and process that one profile. This duplicate re-process branch is the only approved AI deletion case.
+
+Do not run `sync-connections` or `score-fits` for single-profile mode. The profile is treated as operator-supplied and manually qualified after dedupe clears, then `sync-company-websites` and `submit-qualified` run by default. Use `--skip-finalization` only when the user explicitly asks for testing without portal submission.
+
 ## Reference routing
 
 | Task | Read |
@@ -93,6 +107,7 @@ Use individual commands only for debugging — not during a guided batch run:
 
 ```bash
 npm run login-linkedin
+npm run process-profile -- --profile-url <linkedin-profile-url>
 npm run sync-connections -- --limit 10 --dry-run
 npm run process-queue -- --limit 10 --dry-run
 npm run sync-company-profiles -- --dry-run

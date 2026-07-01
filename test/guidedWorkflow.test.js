@@ -283,6 +283,25 @@ test("runGuidedWorkflow skipFinalization stops before submit-qualified and final
   assert.equal(clientEnded, true);
   assert.doesNotMatch(logs.join("\n"), /Step 8\/8: submit-qualified/);
   assert.doesNotMatch(logs.join("\n"), /Status summary/);
+
+  const envContent = await readFile(path.join(directory, ".env"), "utf8");
+  assert.match(envContent, /^LINKEDIN_ACCOUNT=kathryn$/m);
+});
+
+test("resolveGuidedWorkflowAnswers reads LINKEDIN_ACCOUNT from env", async () => {
+  const answers = resolveGuidedWorkflowAnswers({
+    env: {
+      DATABASE_URL: "postgres://example",
+      OPENAI_API_KEY: "sk-test",
+      PORTAL_QUALIFIED_INGEST_URL: "https://portal.example/ingest",
+      PORTAL_CALLBACK_SECRET: "secret",
+      LINKEDIN_ACCOUNT: "ice"
+    },
+    limit: 4
+  });
+
+  assert.equal(answers.linkedinAccount, "ice");
+  assert.equal(answers.connectionLimit, 4);
 });
 
 test("runGuidedWorkflow splits requests above the batch cap into sequential batches", async () => {
