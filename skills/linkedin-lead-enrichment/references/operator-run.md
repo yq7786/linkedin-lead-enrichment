@@ -50,7 +50,7 @@ npm run process-profile -- --profile-url <linkedin-profile-url>
 
 This mode reads `LINKEDIN_ACCOUNT` from `.env`, checks for an existing `linkedin_connection_inventory` row with the same normalized profile URL, skips `sync-connections`, skips `score-fits`, manually qualifies the candidate after dedupe clears, and submits to the portal by default.
 
-If a duplicate inventory row exists, ask the user whether to re-process or skip. Re-processing deletes only the matching candidate markdown file and only the matching inventory row before recreating the row and processing it again. This duplicate re-process branch is the only approved AI deletion case.
+If a duplicate inventory row exists, stop and ask the user: "Should I re-process the provided lead, or skip processing it?" Re-processing deletes only the matching candidate markdown file and only the matching inventory row before recreating the row and processing it again. This duplicate re-process branch is the only approved AI deletion case.
 
 Use `--skip-finalization` only for testing when the user explicitly does not want portal submission.
 

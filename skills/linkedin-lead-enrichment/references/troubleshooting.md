@@ -10,4 +10,4 @@
 
 **Missing individual_id / company_id after submission:** Expected until the portal processes the candidate. The portal sets these fields on `linkedin_connection_inventory` after successful acceptance.
 
-**Single profile already exists:** `process-profile` checks `linkedin_connection_inventory` for the normalized LinkedIn profile URL before browser work. Ask the user whether to re-process or skip. Skip makes no changes. Re-process deletes only the matching candidate markdown file and only the matching inventory row, then processes that one profile again. This duplicate re-process branch is the only approved AI deletion case.
+**Single profile already exists:** `process-profile` checks `linkedin_connection_inventory` for the normalized LinkedIn profile URL before browser work. Stop and ask the user: "Should I re-process the provided lead, or skip processing it?" Skip makes no changes. Re-process deletes only the matching candidate markdown file and only the matching inventory row, then processes that one profile again. This duplicate re-process branch is the only approved AI deletion case.
